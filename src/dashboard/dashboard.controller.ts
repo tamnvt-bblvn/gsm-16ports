@@ -30,13 +30,16 @@ export class DashboardController {
     const candidates = [
       path.join(__dirname, 'public', fileName),
       path.join(process.cwd(), 'src', 'dashboard', 'public', fileName),
-    ];
+    ].filter((candidate) => fs.existsSync(candidate));
 
-    const match = candidates.find((candidate) => fs.existsSync(candidate));
-    if (!match) {
+    if (!candidates.length) {
       throw new NotFoundException(`Dashboard asset missing: ${fileName}`);
     }
 
-    return match;
+    return candidates.reduce((newest, candidate) =>
+      fs.statSync(candidate).mtimeMs > fs.statSync(newest).mtimeMs
+        ? candidate
+        : newest,
+    );
   }
 }

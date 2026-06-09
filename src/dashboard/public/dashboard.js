@@ -609,6 +609,9 @@ function simDrawerLabel(modem) {
 }
 
 function syncDrawerEnabledToggle(modem) {
+  if (!drawerEnabledToggle || !drawerEnabledLabel) {
+    return;
+  }
   const enabled = modem.enabled !== false;
   suppressEnabledToggleEvent = true;
   drawerEnabledToggle.checked = enabled;
@@ -627,11 +630,19 @@ function renderDrawerMetric(label, value, tone = '') {
 }
 
 function renderDrawerDetail(modem) {
-  drawerTitle.textContent = modem.port;
+  if (!modem || !drawer) {
+    return;
+  }
+
+  if (drawerTitle) {
+    drawerTitle.textContent = modem.port;
+  }
 
   const statusLabel = STATUS_LABEL[modem.status] ?? modem.status;
-  drawerStatusBadge.className = `drawer-status-badge status-${modem.status}`;
-  drawerStatusBadge.textContent = statusLabel;
+  if (drawerStatusBadge) {
+    drawerStatusBadge.className = `drawer-status-badge status-${modem.status}`;
+    drawerStatusBadge.textContent = statusLabel;
+  }
 
   const enabledLabel = modem.enabled !== false ? 'Bật' : 'Tắt';
   const enabledTone = modem.enabled !== false ? 'ok' : 'muted';
@@ -643,41 +654,60 @@ function renderDrawerDetail(modem) {
         ? 'ok'
         : 'warn';
 
-  drawerMetrics.innerHTML = [
-    renderDrawerMetric(
-      'Signal',
-      modem.signal == null ? '—' : String(modem.signal),
-    ),
-    renderDrawerMetric('Operator', modem.operator ?? '—'),
-    renderDrawerMetric('Phone', modem.phone ?? '—', modem.phone ? '' : 'warn'),
-    renderDrawerMetric('SIM', simLabel, simTone),
-    renderDrawerMetric('Monitor', enabledLabel, enabledTone),
-  ].join('');
+  if (drawerMetrics) {
+    drawerMetrics.innerHTML = [
+      renderDrawerMetric(
+        'Signal',
+        modem.signal == null ? '—' : String(modem.signal),
+      ),
+      renderDrawerMetric('Operator', modem.operator ?? '—'),
+      renderDrawerMetric('Phone', modem.phone ?? '—', modem.phone ? '' : 'warn'),
+      renderDrawerMetric('SIM', simLabel, simTone),
+      renderDrawerMetric('Monitor', enabledLabel, enabledTone),
+    ].join('');
+  }
 
   syncDrawerEnabledToggle(modem);
 
   const portDisabled = modem.status === 'disabled' || modem.enabled === false;
   const canSend = modem.status === 'online' && !portDisabled;
 
-  drawerPhoneBlock.classList.toggle('drawer-panel-highlight', isMissingPhone(modem));
-  drawerPhoneTag.textContent = modem.phone ?? 'Chưa có';
-  drawerPhoneTag.className = `drawer-panel-tag mono${modem.phone ? ' is-ok' : ' is-warn'}`;
-  drawerPhoneSave.disabled = portDisabled;
+  if (drawerPhoneBlock) {
+    drawerPhoneBlock.classList.toggle(
+      'drawer-panel-highlight',
+      isMissingPhone(modem),
+    );
+  }
+  if (drawerPhoneTag) {
+    drawerPhoneTag.textContent = modem.phone ?? 'Chưa có';
+    drawerPhoneTag.className = `drawer-panel-tag mono${modem.phone ? ' is-ok' : ' is-warn'}`;
+  }
+  if (drawerPhoneSave) {
+    drawerPhoneSave.disabled = portDisabled;
+  }
 
-  sendSmsSection.classList.toggle('drawer-panel-muted', !canSend);
-  sendSubmit.disabled = !canSend;
-  sendStatusTag.textContent = canSend ? 'Sẵn sàng' : 'Chờ online';
-  sendStatusTag.className = `drawer-panel-tag mono${canSend ? ' is-ok' : ' is-warn'}`;
+  if (sendSmsSection) {
+    sendSmsSection.classList.toggle('drawer-panel-muted', !canSend);
+  }
+  if (sendSubmit) {
+    sendSubmit.disabled = !canSend;
+  }
+  if (sendStatusTag) {
+    sendStatusTag.textContent = canSend ? 'Sẵn sàng' : 'Chờ online';
+    sendStatusTag.className = `drawer-panel-tag mono${canSend ? ' is-ok' : ' is-warn'}`;
+  }
 
-  if (!canSend) {
-    sendHint.className = 'drawer-alert is-warn';
-    sendHint.textContent =
-      modem.enabled === false || modem.status === 'disabled'
-        ? 'Cổng đang tắt. Bật monitor để gửi SMS.'
-        : 'Modem chưa online, không thể gửi SMS.';
-  } else {
-    sendHint.className = 'drawer-alert hidden';
-    sendHint.textContent = '';
+  if (sendHint) {
+    if (!canSend) {
+      sendHint.className = 'drawer-alert is-warn';
+      sendHint.textContent =
+        modem.enabled === false || modem.status === 'disabled'
+          ? 'Cổng đang tắt. Bật monitor để gửi SMS.'
+          : 'Modem chưa online, không thể gửi SMS.';
+    } else {
+      sendHint.className = 'drawer-alert hidden';
+      sendHint.textContent = '';
+    }
   }
 }
 
@@ -700,19 +730,21 @@ function closeDrawer() {
   drawerOverlay.classList.add('hidden');
 }
 
-modemTableBody.addEventListener('click', (event) => {
-  const row = event.target.closest('tr.clickable');
-  if (row?.dataset.port) openDrawer(row.dataset.port);
-});
+if (modemTableBody) {
+  modemTableBody.addEventListener('click', (event) => {
+    const row = event.target.closest('tr.clickable');
+    if (row?.dataset.port) openDrawer(row.dataset.port);
+  });
 
-modemTableBody.addEventListener('keydown', (event) => {
-  if (event.key !== 'Enter' && event.key !== ' ') return;
-  const row = event.target.closest('tr.clickable');
-  if (row?.dataset.port) {
-    event.preventDefault();
-    openDrawer(row.dataset.port);
-  }
-});
+  modemTableBody.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const row = event.target.closest('tr.clickable');
+    if (row?.dataset.port) {
+      event.preventDefault();
+      openDrawer(row.dataset.port);
+    }
+  });
+}
 
 phoneSetupList.addEventListener('input', (event) => {
   const input = event.target.closest('.phone-setup-input');
@@ -795,15 +827,17 @@ async function savePortEnabled(port, enabled) {
   return payload;
 }
 
-drawerEnabledToggle.addEventListener('change', () => {
-  if (suppressEnabledToggleEvent || !activeDrawerPort) return;
-  const modem = modems.get(activeDrawerPort);
-  if (!modem) return;
+if (drawerEnabledToggle) {
+  drawerEnabledToggle.addEventListener('change', () => {
+    if (suppressEnabledToggleEvent || !activeDrawerPort) return;
+    const modem = modems.get(activeDrawerPort);
+    if (!modem) return;
 
-  const nextEnabled = drawerEnabledToggle.checked;
-  syncDrawerEnabledToggle(modem);
-  openEnabledConfirm(activeDrawerPort, nextEnabled);
-});
+    const nextEnabled = drawerEnabledToggle.checked;
+    syncDrawerEnabledToggle(modem);
+    openEnabledConfirm(activeDrawerPort, nextEnabled);
+  });
+}
 
 enabledConfirmCancel.addEventListener('click', closeEnabledConfirm);
 
