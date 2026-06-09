@@ -27,19 +27,25 @@ export class DashboardController {
   }
 
   private resolveAsset(fileName: string): string {
-    const candidates = [
-      path.join(__dirname, 'public', fileName),
-      path.join(process.cwd(), 'src', 'dashboard', 'public', fileName),
-    ].filter((candidate) => fs.existsSync(candidate));
+    const distPath = path.join(__dirname, 'public', fileName);
+    const srcPath = path.join(
+      process.cwd(),
+      'src',
+      'dashboard',
+      'public',
+      fileName,
+    );
+    const isProd = process.env.NODE_ENV === 'production';
+    const primary = isProd ? distPath : srcPath;
+    const fallback = isProd ? srcPath : distPath;
 
-    if (!candidates.length) {
-      throw new NotFoundException(`Dashboard asset missing: ${fileName}`);
+    if (fs.existsSync(primary)) {
+      return primary;
+    }
+    if (fs.existsSync(fallback)) {
+      return fallback;
     }
 
-    return candidates.reduce((newest, candidate) =>
-      fs.statSync(candidate).mtimeMs > fs.statSync(newest).mtimeMs
-        ? candidate
-        : newest,
-    );
+    throw new NotFoundException(`Dashboard asset missing: ${fileName}`);
   }
 }

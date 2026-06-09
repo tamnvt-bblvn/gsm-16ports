@@ -83,6 +83,12 @@ const STATUS_LABEL = {
   disabled: 'disabled',
 };
 
+function on(element, event, handler) {
+  if (element) {
+    element.addEventListener(event, handler);
+  }
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -131,7 +137,7 @@ function applyTheme(theme) {
   applyTheme(stored ?? (prefersLight ? 'light' : 'dark'));
 })();
 
-themeToggle.addEventListener('click', () => {
+on(themeToggle, 'click', () => {
   const current = document.documentElement.getAttribute('data-theme');
   applyTheme(current === 'light' ? 'dark' : 'light');
 });
@@ -267,6 +273,9 @@ if (phoneSetup) {
 }
 
 function capturePhoneDraftsFromDom() {
+  if (!phoneSetupList) {
+    return;
+  }
   for (const input of phoneSetupList.querySelectorAll('.phone-setup-input')) {
     if (input.dataset.port) {
       phoneDraftByPort.set(input.dataset.port, input.value);
@@ -305,16 +314,24 @@ function renderPhoneSetup() {
     .sort((a, b) => a.port.localeCompare(b.port, undefined, { numeric: true }));
 
   if (!missing.length) {
-    phoneSetup.hidden = true;
-    phoneSetupList.innerHTML = '';
+    if (phoneSetup) {
+      phoneSetup.hidden = true;
+    }
+    if (phoneSetupList) {
+      phoneSetupList.innerHTML = '';
+    }
     lastMissingPhonePortsKey = '';
     return;
   }
 
   const portsKey = missing.map((modem) => modem.port).join('|');
 
-  phoneSetup.hidden = false;
-  phoneSetupCount.textContent = `${missing.length} cổng`;
+  if (phoneSetup) {
+    phoneSetup.hidden = false;
+  }
+  if (phoneSetupCount) {
+    phoneSetupCount.textContent = `${missing.length} cổng`;
+  }
 
   if (portsKey === lastMissingPhonePortsKey) {
     return;
@@ -322,7 +339,9 @@ function renderPhoneSetup() {
 
   capturePhoneDraftsFromDom();
   lastMissingPhonePortsKey = portsKey;
-  phoneSetupList.innerHTML = missing.map(buildPhoneSetupItem).join('');
+  if (phoneSetupList) {
+    phoneSetupList.innerHTML = missing.map(buildPhoneSetupItem).join('');
+  }
 }
 
 function renderSimPill(modem) {
@@ -573,23 +592,23 @@ async function runSearch(page = 1) {
   }
 }
 
-smsToolbar.addEventListener('submit', (event) => {
+on(smsToolbar, 'submit', (event) => {
   event.preventDefault();
   runSearch(1);
 });
 
-smsClear.addEventListener('click', () => {
+on(smsClear, 'click', () => {
   smsSearch.value = '';
   smsPortFilter.value = '';
   smsOnlyOtp.checked = false;
   enterLiveMode();
 });
 
-smsPrev.addEventListener('click', () => {
+on(smsPrev, 'click', () => {
   if (searchPage > 1) runSearch(searchPage - 1);
 });
 
-smsNext.addEventListener('click', () => {
+on(smsNext, 'click', () => {
   if (searchPage < searchTotalPages) runSearch(searchPage + 1);
 });
 
@@ -712,48 +731,77 @@ function renderDrawerDetail(modem) {
 }
 
 function openDrawer(port) {
-  const modem = modems.get(port);
-  if (!modem) return;
-  activeDrawerPort = port;
-  renderDrawerDetail(modem);
-  drawerPhoneInput.value = modem.phone ?? phoneDraftByPort.get(port) ?? '';
-  sendPhone.value = '';
-  sendMessage.value = '';
-  drawer.classList.remove('hidden');
-  drawerOverlay.classList.remove('hidden');
-  sendPhone.focus();
+  try {
+    const modem = modems.get(port);
+    if (!modem || !drawer || !drawerOverlay) {
+      return;
+    }
+
+    activeDrawerPort = port;
+    renderDrawerDetail(modem);
+
+    if (drawerPhoneInput) {
+      drawerPhoneInput.value =
+        modem.phone ?? phoneDraftByPort.get(port) ?? '';
+    }
+    if (sendPhone) {
+      sendPhone.value = '';
+    }
+    if (sendMessage) {
+      sendMessage.value = '';
+    }
+
+    drawer.classList.remove('hidden');
+    drawerOverlay.classList.remove('hidden');
+    drawer.setAttribute('aria-hidden', 'false');
+    drawerOverlay.setAttribute('aria-hidden', 'false');
+
+    if (sendPhone) {
+      sendPhone.focus();
+    } else if (drawerClose) {
+      drawerClose.focus();
+    }
+  } catch (error) {
+    console.error('openDrawer failed', port, error);
+    showToast('Không mở được chi tiết cổng', 'error');
+  }
 }
 
 function closeDrawer() {
   activeDrawerPort = null;
-  drawer.classList.add('hidden');
-  drawerOverlay.classList.add('hidden');
+  if (drawer) {
+    drawer.classList.add('hidden');
+    drawer.setAttribute('aria-hidden', 'true');
+  }
+  if (drawerOverlay) {
+    drawerOverlay.classList.add('hidden');
+    drawerOverlay.setAttribute('aria-hidden', 'true');
+  }
 }
 
-if (modemTableBody) {
-  modemTableBody.addEventListener('click', (event) => {
-    const row = event.target.closest('tr.clickable');
-    if (row?.dataset.port) openDrawer(row.dataset.port);
-  });
+document.addEventListener('click', (event) => {
+  const row = event.target.closest('#modem-table-body tr.clickable');
+  if (row?.dataset.port) {
+    openDrawer(row.dataset.port);
+  }
+});
 
-  modemTableBody.addEventListener('keydown', (event) => {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    const row = event.target.closest('tr.clickable');
-    if (row?.dataset.port) {
-      event.preventDefault();
-      openDrawer(row.dataset.port);
-    }
-  });
-}
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  const row = event.target.closest('#modem-table-body tr.clickable');
+  if (!row?.dataset.port) return;
+  event.preventDefault();
+  openDrawer(row.dataset.port);
+});
 
-phoneSetupList.addEventListener('input', (event) => {
+on(phoneSetupList, 'input', (event) => {
   const input = event.target.closest('.phone-setup-input');
   if (input?.dataset.port) {
     phoneDraftByPort.set(input.dataset.port, input.value);
   }
 });
 
-phoneSetupList.addEventListener('click', (event) => {
+on(phoneSetupList, 'click', (event) => {
   const button = event.target.closest('.phone-setup-save');
   if (!button?.dataset.port) return;
   const row = button.closest('.phone-setup-item');
@@ -762,7 +810,7 @@ phoneSetupList.addEventListener('click', (event) => {
   requestPhoneSave(button.dataset.port, input.value);
 });
 
-phoneSetupList.addEventListener('keydown', (event) => {
+on(phoneSetupList, 'keydown', (event) => {
   if (event.key !== 'Enter') return;
   const input = event.target.closest('.phone-setup-input');
   if (!input?.dataset.port) return;
@@ -770,8 +818,8 @@ phoneSetupList.addEventListener('keydown', (event) => {
   requestPhoneSave(input.dataset.port, input.value);
 });
 
-drawerPhoneSave.addEventListener('click', () => {
-  if (!activeDrawerPort) return;
+on(drawerPhoneSave, 'click', () => {
+  if (!activeDrawerPort || !drawerPhoneInput) return;
   requestPhoneSave(activeDrawerPort, drawerPhoneInput.value);
 });
 
@@ -839,15 +887,15 @@ if (drawerEnabledToggle) {
   });
 }
 
-enabledConfirmCancel.addEventListener('click', closeEnabledConfirm);
+on(enabledConfirmCancel, 'click', closeEnabledConfirm);
 
-enabledConfirmOverlay.addEventListener('click', (event) => {
+on(enabledConfirmOverlay, 'click', (event) => {
   if (event.target === enabledConfirmOverlay) {
     closeEnabledConfirm();
   }
 });
 
-enabledConfirmOk.addEventListener('click', async () => {
+on(enabledConfirmOk, 'click', async () => {
   if (!pendingEnabledSave) return;
   const { port, enabled } = pendingEnabledSave;
   enabledConfirmOk.disabled = true;
@@ -864,15 +912,15 @@ enabledConfirmOk.addEventListener('click', async () => {
   }
 });
 
-confirmCancel.addEventListener('click', closePhoneConfirm);
+on(confirmCancel, 'click', closePhoneConfirm);
 
-phoneConfirmOverlay.addEventListener('click', (event) => {
+on(phoneConfirmOverlay, 'click', (event) => {
   if (event.target === phoneConfirmOverlay) {
     closePhoneConfirm();
   }
 });
 
-confirmOk.addEventListener('click', async () => {
+on(confirmOk, 'click', async () => {
   if (!pendingPhoneSave) return;
   const { port, phone } = pendingPhoneSave;
   confirmOk.disabled = true;
@@ -898,15 +946,15 @@ document.addEventListener('keydown', (event) => {
     closePhoneConfirm();
     return;
   }
-  if (event.key === 'Escape' && !drawer.classList.contains('hidden')) {
+  if (event.key === 'Escape' && drawer && !drawer.classList.contains('hidden')) {
     closeDrawer();
   }
 });
 
-drawerClose.addEventListener('click', closeDrawer);
-drawerOverlay.addEventListener('click', closeDrawer);
+on(drawerClose, 'click', closeDrawer);
+on(drawerOverlay, 'click', closeDrawer);
 
-sendForm.addEventListener('submit', async (event) => {
+on(sendForm, 'submit', async (event) => {
   event.preventDefault();
   if (!activeDrawerPort) return;
 

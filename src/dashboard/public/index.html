@@ -14,7 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/dashboard.css" />
+    <link rel="stylesheet" href="/dashboard.css?v=20260609" />
   </head>
   <body>
     <a class="skip-link" href="#main-content">Chuyển tới nội dung</a>
@@ -237,13 +237,18 @@
       </footer>
     </div>
 
-    <div class="drawer-overlay hidden" id="drawer-overlay"></div>
+    <div
+      class="drawer-overlay hidden"
+      id="drawer-overlay"
+      aria-hidden="true"
+    ></div>
     <aside
       class="drawer hidden"
       id="modem-drawer"
       role="dialog"
       aria-modal="true"
       aria-labelledby="drawer-title"
+      aria-hidden="true"
     >
       <div class="drawer-top">
         <div class="drawer-top-main">
@@ -420,6 +425,6 @@
     <div class="toasts" id="toast-stack" aria-live="assertive"></div>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="/dashboard.js"></script>
+    <script src="/dashboard.js?v=20260609"></script>
   </body>
 </html>
