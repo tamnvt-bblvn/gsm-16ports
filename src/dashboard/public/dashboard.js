@@ -32,7 +32,12 @@ const drawer = document.getElementById('modem-drawer');
 const drawerOverlay = document.getElementById('drawer-overlay');
 const drawerClose = document.getElementById('drawer-close');
 const drawerTitle = document.getElementById('drawer-title');
-const drawerDetail = document.getElementById('drawer-detail');
+const drawerStatusBadge = document.getElementById('drawer-status-badge');
+const drawerMetrics = document.getElementById('drawer-metrics');
+const drawerPhoneBlock = document.getElementById('drawer-phone-block');
+const drawerPhoneTag = document.getElementById('drawer-phone-tag');
+const sendStatusTag = document.getElementById('send-status-tag');
+const sendSmsSection = document.getElementById('send-sms-section');
 const sendForm = document.getElementById('send-sms-form');
 const sendPhone = document.getElementById('send-phone');
 const sendMessage = document.getElementById('send-message');
@@ -611,34 +616,69 @@ function syncDrawerEnabledToggle(modem) {
   suppressEnabledToggleEvent = false;
 }
 
+function renderDrawerMetric(label, value, tone = '') {
+  const toneClass = tone ? ` drawer-metric-value-${tone}` : '';
+  return `
+    <div class="drawer-metric">
+      <span class="drawer-metric-label">${escapeHtml(label)}</span>
+      <span class="drawer-metric-value mono${toneClass}">${escapeHtml(value)}</span>
+    </div>
+  `;
+}
+
 function renderDrawerDetail(modem) {
   drawerTitle.textContent = modem.port;
-  const rows = [
-    ['Status', STATUS_LABEL[modem.status] ?? modem.status],
-    ['Operator', modem.operator ?? '—'],
-    ['Signal', modem.signal == null ? '—' : String(modem.signal)],
-    ['Phone', modem.phone ?? '—'],
-    ['SIM', simDrawerLabel(modem)],
-    ['Enabled', modem.enabled ? 'Có' : 'Không'],
-  ];
-  drawerDetail.innerHTML = rows
-    .map(
-      ([label, value]) =>
-        `<dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd>`,
-    )
-    .join('');
+
+  const statusLabel = STATUS_LABEL[modem.status] ?? modem.status;
+  drawerStatusBadge.className = `drawer-status-badge status-${modem.status}`;
+  drawerStatusBadge.textContent = statusLabel;
+
+  const enabledLabel = modem.enabled !== false ? 'Bật' : 'Tắt';
+  const enabledTone = modem.enabled !== false ? 'ok' : 'muted';
+  const simLabel = simDrawerLabel(modem);
+  const simTone =
+    modem.status === 'no_sim'
+      ? 'muted'
+      : modem.simReady
+        ? 'ok'
+        : 'warn';
+
+  drawerMetrics.innerHTML = [
+    renderDrawerMetric(
+      'Signal',
+      modem.signal == null ? '—' : String(modem.signal),
+    ),
+    renderDrawerMetric('Operator', modem.operator ?? '—'),
+    renderDrawerMetric('Phone', modem.phone ?? '—', modem.phone ? '' : 'warn'),
+    renderDrawerMetric('SIM', simLabel, simTone),
+    renderDrawerMetric('Monitor', enabledLabel, enabledTone),
+  ].join('');
 
   syncDrawerEnabledToggle(modem);
 
-  const canSend = modem.status === 'online';
-  sendSubmit.disabled = !canSend;
-  sendHint.className = 'send-hint';
-  sendHint.textContent = canSend
-    ? ''
-    : 'Modem chưa online, không thể gửi SMS.';
-
   const portDisabled = modem.status === 'disabled' || modem.enabled === false;
+  const canSend = modem.status === 'online' && !portDisabled;
+
+  drawerPhoneBlock.classList.toggle('drawer-panel-highlight', isMissingPhone(modem));
+  drawerPhoneTag.textContent = modem.phone ?? 'Chưa có';
+  drawerPhoneTag.className = `drawer-panel-tag mono${modem.phone ? ' is-ok' : ' is-warn'}`;
   drawerPhoneSave.disabled = portDisabled;
+
+  sendSmsSection.classList.toggle('drawer-panel-muted', !canSend);
+  sendSubmit.disabled = !canSend;
+  sendStatusTag.textContent = canSend ? 'Sẵn sàng' : 'Chờ online';
+  sendStatusTag.className = `drawer-panel-tag mono${canSend ? ' is-ok' : ' is-warn'}`;
+
+  if (!canSend) {
+    sendHint.className = 'drawer-alert is-warn';
+    sendHint.textContent =
+      modem.enabled === false || modem.status === 'disabled'
+        ? 'Cổng đang tắt. Bật monitor để gửi SMS.'
+        : 'Modem chưa online, không thể gửi SMS.';
+  } else {
+    sendHint.className = 'drawer-alert hidden';
+    sendHint.textContent = '';
+  }
 }
 
 function openDrawer(port) {
@@ -719,9 +759,13 @@ function openEnabledConfirm(port, enabled) {
 }
 
 function closeEnabledConfirm() {
+  const port = pendingEnabledSave?.port ?? activeDrawerPort;
   pendingEnabledSave = null;
   enabledConfirmOverlay.classList.add('hidden');
   enabledConfirmOverlay.hidden = true;
+  if (port && modems.has(port) && activeDrawerPort === port) {
+    renderDrawerDetail(modems.get(port));
+  }
 }
 
 async function savePortEnabled(port, enabled) {
@@ -837,7 +881,8 @@ sendForm.addEventListener('submit', async (event) => {
   if (!phone || !message) return;
 
   sendSubmit.disabled = true;
-  sendHint.className = 'send-hint';
+  sendHint.className = 'drawer-alert is-info';
+  sendHint.classList.remove('hidden');
   sendHint.textContent = 'Đang gửi…';
 
   try {
@@ -851,9 +896,13 @@ sendForm.addEventListener('submit', async (event) => {
     );
     const payload = await res.json().catch(() => ({}));
     if (!res.ok) {
-      throw new Error(payload.message ?? 'Gửi SMS thất bại');
+      const message = Array.isArray(payload.message)
+        ? payload.message.join(', ')
+        : payload.message ?? 'Gửi SMS thất bại';
+      throw new Error(message);
     }
-    sendHint.className = 'send-hint is-success';
+    sendHint.className = 'drawer-alert is-success';
+    sendHint.classList.remove('hidden');
     sendHint.textContent = `Đã gửi tới ${phone}`;
     sendMessage.value = '';
     showToast(`SMS đã gửi qua ${activeDrawerPort}`, 'success');
@@ -861,7 +910,8 @@ sendForm.addEventListener('submit', async (event) => {
     const text = Array.isArray(error.message)
       ? error.message.join(', ')
       : error.message;
-    sendHint.className = 'send-hint is-error';
+    sendHint.className = 'drawer-alert is-error';
+    sendHint.classList.remove('hidden');
     sendHint.textContent = text;
     showToast(text, 'error');
   } finally {

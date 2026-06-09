@@ -74,7 +74,7 @@ export class ModemInstance {
     this.destroyed = true;
     this.clearTimers();
     await this.closePort(true);
-    this.updateStatus('offline');
+    this.state.status = 'offline';
   }
 
   private async connect(): Promise<void> {
@@ -293,7 +293,7 @@ export class ModemInstance {
         } else {
           current.reject(
             new Error(
-              `AT command failed on ${this.portName}: ${current.lines.join(' | ')}`,
+              `${this.portName}: ${this.atCommandService.formatFailureMessage(current.lines)}`,
             ),
           );
         }
@@ -364,24 +364,37 @@ export class ModemInstance {
 
   async sendSms(phone: string, message: string): Promise<number> {
     if (this.state.status !== 'online') {
-      throw new Error(`Modem ${this.portName} is not online`);
+      throw new Error(`Modem ${this.portName} chưa online, không thể gửi SMS`);
     }
 
     return new Promise<number>((resolve, reject) => {
       this.commandChain = this.commandChain
         .then(async () => {
           if (!this.port?.isOpen) {
-            throw new Error(`Port ${this.portName} is not open`);
+            throw new Error(`Cổng ${this.portName} chưa mở`);
           }
 
           const config = this.modemConfigService.getConfig();
           await this.writeRaw(`AT+CMGS="${phone}"\r`);
-          await this.awaitPromptCharacter(config.atCommandTimeoutMs);
+          try {
+            await this.awaitPromptCharacter(config.atCommandTimeoutMs, phone);
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              /CMS ERROR|CME ERROR|: ERROR/i.test(error.message)
+            ) {
+              throw error;
+            }
+            throw this.wrapSmsSendError(phone, error);
+          }
 
           const lines = await new Promise<string[]>((cmdResolve, cmdReject) => {
             const timer = setTimeout(() => {
+              const captured = this.activeCommand?.lines ?? [];
               this.activeCommand = null;
-              cmdReject(new Error(`SMS send timeout on ${this.portName}`));
+              cmdReject(
+                this.createSmsTimeoutError(phone, captured, config.smsSendTimeoutMs),
+              );
             }, config.smsSendTimeoutMs);
 
             this.activeCommand = {
@@ -398,7 +411,13 @@ export class ModemInstance {
             });
           });
 
-          return this.parseSmsReference(lines);
+          const reference = this.parseSmsReference(lines);
+          if (reference < 0) {
+            throw new Error(
+              `${this.portName} → ${phone}: modem không trả +CMGS (${this.atCommandService.formatFailureMessage(lines)})`,
+            );
+          }
+          return reference;
         })
         .then((reference) => {
           this.logger.log(`sms.sent port=${this.portName} to=${phone}`);
@@ -423,23 +442,70 @@ export class ModemInstance {
     });
   }
 
-  private awaitPromptCharacter(timeoutMs: number): Promise<void> {
+  private createSmsTimeoutError(
+    phone: string,
+    lines: string[],
+    timeoutMs: number,
+  ): Error {
+    if (lines.length) {
+      return new Error(
+        `Timeout gửi SMS ${this.portName} → ${phone} (${timeoutMs}ms): ${this.atCommandService.formatFailureMessage(lines)}`,
+      );
+    }
+    return new Error(
+      `Timeout gửi SMS ${this.portName} → ${phone} (${timeoutMs}ms). Modem không trả +CMGS/OK.`,
+    );
+  }
+
+  private wrapSmsSendError(phone: string, error: unknown): Error {
+    if (error instanceof Error && error.message.includes('Timeout chờ >')) {
+      return error;
+    }
+    return new Error(
+      `Không nhận ký tự > sau AT+CMGS (${this.portName} → ${phone}). Modem có thể bận, số sai định dạng, hoặc SIM chưa sẵn sàng gửi SMS.`,
+    );
+  }
+
+  private awaitPromptCharacter(timeoutMs: number, phone: string): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const port = this.port;
       if (!port) {
-        reject(new Error(`Port ${this.portName} is not open`));
+        reject(new Error(`Cổng ${this.portName} chưa mở`));
         return;
       }
 
+      const captured: string[] = [];
       const onData = (chunk: Buffer) => {
-        if (chunk.toString('utf8').includes('>')) {
+        const text = chunk.toString('utf8');
+        for (const line of text.split(/\r?\n/)) {
+          const trimmed = line.trim();
+          if (trimmed) {
+            captured.push(trimmed);
+          }
+        }
+        if (text.includes('>')) {
           cleanup();
           resolve();
+          return;
+        }
+        if (/(?:ERROR|\+CMS ERROR|\+CME ERROR)/i.test(text)) {
+          cleanup();
+          reject(
+            new Error(
+              `${this.portName} → ${phone}: ${this.atCommandService.formatFailureMessage(captured)}`,
+            ),
+          );
         }
       };
       const timer = setTimeout(() => {
         cleanup();
-        reject(new Error(`SMS prompt timeout on ${this.portName}`));
+        reject(
+          new Error(
+            captured.length
+              ? `Timeout chờ > sau AT+CMGS (${this.portName} → ${phone}): ${this.atCommandService.formatFailureMessage(captured)}`
+              : `Timeout chờ > sau AT+CMGS (${this.portName} → ${phone}, ${timeoutMs}ms)`,
+          ),
+        );
       }, timeoutMs);
       const cleanup = () => {
         clearTimeout(timer);
@@ -553,7 +619,7 @@ export class ModemInstance {
       operator: this.state.operator,
       simReady: this.state.simReady,
       phone: this.state.phone,
-      enabled: this.state.enabled,
+      enabled: this.modemConfigService.isPortEnabled(this.portName),
     });
   }
 

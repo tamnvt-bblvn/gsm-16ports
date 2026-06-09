@@ -213,7 +213,7 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
 
     const instance = this.instances.get(port);
     if (instance) {
-      return instance.getState();
+      return { ...instance.getState(), enabled };
     }
 
     return {

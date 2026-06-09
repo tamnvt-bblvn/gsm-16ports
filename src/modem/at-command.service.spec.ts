@@ -31,4 +31,23 @@ describe('AtCommandService', () => {
       expect(service.parseSimReady('+CPIN: NOT INSERTED\r\nOK')).toBe(false);
     });
   });
+
+  describe('formatFailureMessage', () => {
+    it('maps CMS ERROR codes', () => {
+      expect(service.formatFailureMessage(['+CMS ERROR: 310', 'ERROR'])).toContain(
+        'CMS ERROR 310',
+      );
+      expect(service.formatFailureMessage(['+CMS ERROR: 310', 'ERROR'])).toContain(
+        'Chưa cắm SIM',
+      );
+    });
+
+    it('maps CME ERROR codes', () => {
+      expect(service.formatFailureMessage(['+CME ERROR: 10'])).toContain('CME ERROR 10');
+    });
+
+    it('falls back when modem is silent', () => {
+      expect(service.formatFailureMessage([])).toBe('Modem không phản hồi');
+    });
+  });
 });

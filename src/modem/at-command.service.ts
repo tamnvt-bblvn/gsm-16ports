@@ -124,6 +124,64 @@ export class AtCommandService {
     );
   }
 
+  formatFailureMessage(lines: string[]): string {
+    const joined = lines
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .join(' | ');
+
+    if (!joined) {
+      return 'Modem không phản hồi';
+    }
+
+    const cms = /\+CMS ERROR:\s*(\d+)/i.exec(joined);
+    if (cms) {
+      return `CMS ERROR ${cms[1]} (${this.describeCmsError(cms[1])})`;
+    }
+
+    const cme = /\+CME ERROR:\s*(\d+)/i.exec(joined);
+    if (cme) {
+      return `CME ERROR ${cme[1]} (${this.describeCmeError(cme[1])})`;
+    }
+
+    if (/\bERROR\b/i.test(joined)) {
+      return `Modem ERROR: ${joined}`;
+    }
+
+    return joined;
+  }
+
+  private describeCmsError(code: string): string {
+    const map: Record<string, string> = {
+      '300': 'Lỗi thiết bị',
+      '302': 'Không được phép',
+      '303': 'Không hỗ trợ',
+      '310': 'Chưa cắm SIM',
+      '311': 'SIM yêu cầu PIN',
+      '313': 'Lỗi SIM',
+      '320': 'Bộ nhớ đầy',
+      '321': 'Không tìm thấy SMS',
+      '322': 'Không đủ bộ nhớ',
+      '330': 'Không có dịch vụ SMS',
+      '500': 'Lỗi không xác định',
+      '512': 'Địa chỉ không hợp lệ',
+    };
+    return map[code] ?? 'Lỗi SMS';
+  }
+
+  private describeCmeError(code: string): string {
+    const map: Record<string, string> = {
+      '3': 'Không gửi được (operation not allowed)',
+      '4': 'Không gửi được (operation not supported)',
+      '10': 'Chưa cắm SIM',
+      '11': 'Cần PIN SIM',
+      '13': 'SIM failure',
+      '14': 'Busy',
+      '30': 'Không có dịch vụ mạng',
+    };
+    return map[code] ?? 'Lỗi modem';
+  }
+
   isUnsolicited(line: string): boolean {
     const trimmed = line.trim();
     return (
