@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gsm-otp-postgres
+    restart: unless-stopped
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: gsm
+      POSTGRES_PASSWORD: gsm_password
+      POSTGRES_DB: gsm_otp
+    volumes:
+      - gsm_otp_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U gsm -d gsm_otp']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Optional: run the service in a container (Linux hosts only).
+  # COM/serial ports require device passthrough, e.g.:
+  #   docker compose --profile full up --build
+  # and uncomment the `devices` block below for your adapter.
+  app:
+    build: .
+    container_name: gsm-otp-app
+    profiles: ['full']
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://gsm:gsm_password@postgres:5432/gsm_otp
+      MODEMS_CONFIG: ./config/modems.yaml
+    # devices:
+    #   - '/dev/ttyUSB0:/dev/ttyUSB0'
+    command: sh -c "pnpm exec prisma migrate deploy && node dist/src/main.js"
+
+volumes:
+  gsm_otp_pg_data:

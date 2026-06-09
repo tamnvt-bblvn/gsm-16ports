@@ -1,0 +1,36 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model SmsMessage {
+  id          BigInt   @id @default(autoincrement())
+  modemPort   String   @map("modem_port") @db.VarChar(20)
+  sender      String?  @db.VarChar(30)
+  phoneNumber String?  @map("phone_number") @db.VarChar(30)
+  message     String   @db.Text
+  otpCode     String?  @map("otp_code") @db.VarChar(20)
+  receivedAt  DateTime @map("received_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([modemPort, receivedAt])
+  @@index([phoneNumber, receivedAt])
+  @@unique([modemPort, sender, message, receivedAt], map: "sms_messages_dedup_key")
+  @@map("sms_messages")
+}
+
+model ModemState {
+  port      String   @id @db.VarChar(20)
+  phone     String?  @db.VarChar(30)
+  status    String   @db.VarChar(20)
+  signal    Int?
+  operator  String?  @db.VarChar(50)
+  simReady  Boolean  @default(false) @map("sim_ready")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("modem_states")
+}

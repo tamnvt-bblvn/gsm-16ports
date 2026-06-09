@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="vi" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Theo dõi 16 modem GSM, SMS và OTP realtime"
+    />
+    <title>GSM OTP · Operations</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/dashboard.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Chuyển tới nội dung</a>
+
+    <div class="app">
+      <header class="header">
+        <div class="header-brand">
+          <div class="logo" aria-hidden="true">
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+              <rect x="2" y="2" width="10" height="10" rx="2" fill="currentColor" opacity="0.9"/>
+              <rect x="16" y="2" width="10" height="10" rx="2" fill="currentColor" opacity="0.5"/>
+              <rect x="2" y="16" width="10" height="10" rx="2" fill="currentColor" opacity="0.5"/>
+              <rect x="16" y="16" width="10" height="10" rx="2" fill="currentColor" opacity="0.9"/>
+            </svg>
+          </div>
+          <div>
+            <h1 class="header-title">GSM OTP</h1>
+            <p class="header-sub">16-port monitor · COM3–COM18</p>
+          </div>
+        </div>
+
+        <div class="telemetry" aria-label="Tổng quan modem">
+          <div class="telemetry-item">
+            <span class="telemetry-label">Online</span>
+            <span class="telemetry-value telemetry-ok" id="stat-online">—</span>
+          </div>
+          <div class="telemetry-divider" aria-hidden="true"></div>
+          <div class="telemetry-item">
+            <span class="telemetry-label">Connecting</span>
+            <span class="telemetry-value telemetry-warn" id="stat-connecting">—</span>
+          </div>
+          <div class="telemetry-divider" aria-hidden="true"></div>
+          <div class="telemetry-item">
+            <span class="telemetry-label">Disabled</span>
+            <span class="telemetry-value telemetry-muted" id="stat-disabled">—</span>
+          </div>
+          <div class="telemetry-divider" aria-hidden="true"></div>
+          <div class="telemetry-item">
+            <span class="telemetry-label">SIM ready</span>
+            <span class="telemetry-value" id="stat-sim-ready">—</span>
+          </div>
+        </div>
+
+        <div class="header-actions">
+          <div
+            id="connection-status"
+            class="conn-badge"
+            role="status"
+            aria-live="polite"
+          >
+            <span class="conn-dot"></span>
+            <span class="connection-label">Đang kết nối...</span>
+          </div>
+          <button
+            id="theme-toggle"
+            class="btn-icon"
+            type="button"
+            aria-label="Đổi giao diện sáng/tối"
+            title="Sáng / Tối"
+          >
+            <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="4"/>
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+            </svg>
+          </button>
+          <a class="btn-ghost" href="/api/docs" target="_blank" rel="noreferrer">API</a>
+        </div>
+      </header>
+
+      <main id="main-content" class="main">
+        <section class="section" aria-labelledby="modems-heading">
+          <div class="section-head">
+            <div>
+              <h2 id="modems-heading">Modem fleet</h2>
+              <p class="section-desc">Bấm một hàng để xem chi tiết và gửi SMS</p>
+            </div>
+            <span class="section-meta mono" id="modem-count">0 modem</span>
+          </div>
+
+          <div class="table-shell" id="modem-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">Port</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Signal</th>
+                  <th scope="col">Operator</th>
+                  <th scope="col">Phone</th>
+                  <th scope="col">SIM</th>
+                </tr>
+              </thead>
+              <tbody id="modem-table-body">
+                <tr class="skeleton-row">
+                  <td colspan="6"><div class="skeleton"></div></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="empty hidden" id="modem-empty">
+            <p class="empty-title">Chưa phát hiện modem</p>
+            <p class="empty-desc">
+              Kiểm tra thiết bị USB và <code>config/modems.yaml</code>
+            </p>
+          </div>
+
+          <div class="phone-setup hidden" id="phone-setup">
+            <div class="phone-setup-head">
+              <div>
+                <h3 class="phone-setup-title">Số SIM chưa cấu hình</h3>
+                <p class="phone-setup-desc">
+                  Gán số thủ công cho cổng đang thiếu. Lưu vào
+                  <code>config/modems.yaml</code>, không cần sửa code.
+                </p>
+              </div>
+              <span class="phone-setup-count mono" id="phone-setup-count">0 cổng</span>
+            </div>
+            <ul class="phone-setup-list" id="phone-setup-list"></ul>
+          </div>
+        </section>
+
+        <div class="split">
+          <section class="section section-grow" aria-labelledby="sms-heading">
+            <div class="section-head">
+              <div>
+                <h2 id="sms-heading">SMS inbox</h2>
+                <p class="section-desc" id="sms-mode-label">
+                  Realtime từ tất cả cổng
+                </p>
+              </div>
+            </div>
+
+            <form class="toolbar" id="sms-toolbar" role="search">
+              <div class="toolbar-fields">
+                <input
+                  type="search"
+                  id="sms-search"
+                  class="input"
+                  placeholder="Nội dung, người gửi, OTP…"
+                  aria-label="Tìm SMS"
+                />
+                <input
+                  type="text"
+                  id="sms-port-filter"
+                  class="input input-narrow"
+                  placeholder="COM"
+                  aria-label="Lọc theo cổng"
+                />
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="sms-only-otp" />
+                <span>Chỉ OTP</span>
+              </label>
+              <div class="toolbar-actions">
+                <button type="submit" class="btn btn-accent">Tìm</button>
+                <button type="button" id="sms-clear" class="btn">Live</button>
+              </div>
+            </form>
+
+            <ul id="sms-feed" class="message-list" aria-live="polite"></ul>
+            <div class="empty" id="sms-empty">
+              <p class="empty-title">Chưa có SMS</p>
+              <p class="empty-desc">Tin mới sẽ hiện ngay khi modem nhận</p>
+            </div>
+
+            <div class="pager hidden" id="sms-pager">
+              <button type="button" class="btn" id="sms-prev">Trước</button>
+              <span class="pager-label mono" id="sms-pager-info">—</span>
+              <button type="button" class="btn" id="sms-next">Sau</button>
+            </div>
+          </section>
+
+          <section class="section section-otp" aria-labelledby="otp-heading">
+            <div class="section-head">
+              <div>
+                <h2 id="otp-heading">OTP</h2>
+                <p class="section-desc">Tách tự động · bấm để copy</p>
+              </div>
+            </div>
+            <ul id="otp-feed" class="otp-list" aria-live="polite"></ul>
+            <div class="empty" id="otp-empty">
+              <p class="empty-title">Chưa có OTP</p>
+              <p class="empty-desc">
+                <code>GET /api/otp/latest</code> hoặc
+                <code>POST /api/wait-otp</code>
+              </p>
+            </div>
+          </section>
+        </div>
+      </main>
+
+      <footer class="footer">
+        <span>GSM OTP Service · NestJS</span>
+        <a class="btn-ghost" href="/api/docs">API docs</a>
+      </footer>
+    </div>
+
+    <div class="drawer-overlay hidden" id="drawer-overlay"></div>
+    <aside
+      class="drawer hidden"
+      id="modem-drawer"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="drawer-title"
+    >
+      <div class="drawer-top">
+        <div>
+          <p class="drawer-kicker mono" id="drawer-kicker">MODEM</p>
+          <h2 class="drawer-title" id="drawer-title">COM—</h2>
+        </div>
+        <button
+          type="button"
+          class="btn-icon"
+          id="drawer-close"
+          aria-label="Đóng"
+        >
+          <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M18 6L6 18M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <dl class="spec-grid" id="drawer-detail"></dl>
+
+      <div class="phone-block" id="drawer-phone-block">
+        <h3 class="phone-block-title">Số SIM cổng này</h3>
+        <p class="phone-block-desc">
+          Dùng khi modem không tự đọc được số (cột Phone hiện "-").
+        </p>
+        <label class="label" for="drawer-phone-input">Số điện thoại</label>
+        <input
+          type="tel"
+          id="drawer-phone-input"
+          class="input mono"
+          placeholder="0924033230"
+          inputmode="numeric"
+          autocomplete="off"
+        />
+        <button type="button" class="btn btn-accent btn-full" id="drawer-phone-save">
+          Lưu số SIM
+        </button>
+      </div>
+
+      <form class="send-block" id="send-sms-form">
+        <h3 class="send-title">Gửi SMS</h3>
+        <label class="label" for="send-phone">Số nhận</label>
+        <input
+          type="text"
+          id="send-phone"
+          class="input"
+          placeholder="0987654321"
+          autocomplete="off"
+          required
+        />
+        <label class="label" for="send-message">Nội dung</label>
+        <textarea
+          id="send-message"
+          class="input"
+          rows="3"
+          maxlength="640"
+          placeholder="Nội dung tin nhắn…"
+          required
+        ></textarea>
+        <button type="submit" class="btn btn-accent btn-full" id="send-submit">
+          Gửi SMS
+        </button>
+        <p class="send-status" id="send-hint"></p>
+      </form>
+    </aside>
+
+    <div class="modal-overlay hidden" id="phone-confirm-overlay" hidden>
+      <div
+        class="modal"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="phone-confirm-title"
+        aria-describedby="phone-confirm-desc"
+      >
+        <div class="modal-icon" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 9v4M12 17h.01"/>
+            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+          </svg>
+        </div>
+        <h3 class="modal-title" id="phone-confirm-title">Xác nhận lưu số SIM</h3>
+        <p class="modal-body" id="phone-confirm-desc">
+          Bạn sắp gán số
+          <strong class="mono" id="confirm-phone">—</strong>
+          cho cổng
+          <strong class="mono" id="confirm-port">COM—</strong>.
+        </p>
+        <p class="modal-note">
+          Thay đổi ghi vào <code>config/modems.yaml</code> và áp dụng ngay trên
+          dashboard. Kiểm tra kỹ trước khi lưu.
+        </p>
+        <div class="modal-actions">
+          <button type="button" class="btn" id="confirm-cancel">Hủy</button>
+          <button type="button" class="btn btn-accent" id="confirm-ok">
+            Lưu số SIM
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toasts" id="toast-stack" aria-live="assertive"></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/dashboard.js"></script>
+  </body>
+</html>
