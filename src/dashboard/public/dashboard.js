@@ -40,7 +40,6 @@ const sendSubmit = document.getElementById('send-submit');
 const sendHint = document.getElementById('send-hint');
 
 const phoneSetup = document.getElementById('phone-setup');
-const phoneSetupToggle = document.getElementById('phone-setup-toggle');
 const phoneSetupList = document.getElementById('phone-setup-list');
 const phoneSetupCount = document.getElementById('phone-setup-count');
 const PHONE_SETUP_COLLAPSED_KEY = 'gsm-phone-setup-collapsed';
@@ -240,9 +239,7 @@ function isPhoneSetupCollapsed() {
   }
 }
 
-function setPhoneSetupCollapsed(collapsed) {
-  phoneSetup.classList.toggle('is-collapsed', collapsed);
-  phoneSetupToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+function persistPhoneSetupCollapsed(collapsed) {
   try {
     localStorage.setItem(PHONE_SETUP_COLLAPSED_KEY, collapsed ? '1' : '0');
   } catch {
@@ -251,14 +248,18 @@ function setPhoneSetupCollapsed(collapsed) {
 }
 
 function initPhoneSetupCollapse() {
-  setPhoneSetupCollapsed(isPhoneSetupCollapsed());
+  if (!phoneSetup) {
+    return;
+  }
+  phoneSetup.open = !isPhoneSetupCollapsed();
 }
 
-phoneSetupToggle.addEventListener('click', () => {
-  setPhoneSetupCollapsed(!phoneSetup.classList.contains('is-collapsed'));
-});
-
-initPhoneSetupCollapse();
+if (phoneSetup) {
+  phoneSetup.addEventListener('toggle', () => {
+    persistPhoneSetupCollapsed(!phoneSetup.open);
+  });
+  initPhoneSetupCollapse();
+}
 
 function capturePhoneDraftsFromDom() {
   for (const input of phoneSetupList.querySelectorAll('.phone-setup-input')) {
@@ -299,7 +300,7 @@ function renderPhoneSetup() {
     .sort((a, b) => a.port.localeCompare(b.port, undefined, { numeric: true }));
 
   if (!missing.length) {
-    phoneSetup.classList.add('hidden');
+    phoneSetup.hidden = true;
     phoneSetupList.innerHTML = '';
     lastMissingPhonePortsKey = '';
     return;
@@ -307,7 +308,7 @@ function renderPhoneSetup() {
 
   const portsKey = missing.map((modem) => modem.port).join('|');
 
-  phoneSetup.classList.remove('hidden');
+  phoneSetup.hidden = false;
   phoneSetupCount.textContent = `${missing.length} cổng`;
 
   if (portsKey === lastMissingPhonePortsKey) {

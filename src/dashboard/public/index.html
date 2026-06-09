@@ -126,32 +126,39 @@
             </p>
           </div>
 
-          <div class="phone-setup hidden" id="phone-setup">
-            <button
-              type="button"
-              class="phone-setup-toggle"
-              id="phone-setup-toggle"
-              aria-expanded="true"
-              aria-controls="phone-setup-body"
-            >
-              <span class="phone-setup-toggle-main">
-                <span class="phone-setup-chevron" aria-hidden="true">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <path d="M6 9l6 6 6-6"/>
-                  </svg>
+          <details class="phone-setup" id="phone-setup" hidden>
+            <summary class="phone-setup-summary" id="phone-setup-toggle">
+              <span class="phone-setup-summary-inner">
+                <span class="phone-setup-lead">
+                  <span class="phone-setup-chevron-box" aria-hidden="true">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <path d="M6 9l6 6 6-6"/>
+                    </svg>
+                  </span>
+                  <span class="phone-setup-heading">
+                    <span class="phone-setup-title">Số SIM chưa cấu hình</span>
+                    <span class="phone-setup-subline">
+                      Gán số thủ công cho cổng thiếu · lưu vào modems.yaml
+                    </span>
+                  </span>
                 </span>
-                <span class="phone-setup-title">Số SIM chưa cấu hình</span>
+                <span class="phone-setup-meta">
+                  <span class="phone-setup-count mono" id="phone-setup-count">0 cổng</span>
+                  <span class="phone-setup-state mono" aria-hidden="true">
+                    <span class="phone-setup-state-open">Thu</span>
+                    <span class="phone-setup-state-closed">Mở</span>
+                  </span>
+                </span>
               </span>
-              <span class="phone-setup-count mono" id="phone-setup-count">0 cổng</span>
-            </button>
+            </summary>
             <div class="phone-setup-body" id="phone-setup-body">
               <p class="phone-setup-desc">
-                Gán số thủ công cho cổng đang thiếu. Lưu vào
-                <code>config/modems.yaml</code>, không cần sửa code.
+                Nhập số cho từng cổng bên dưới. Lưu ghi vào
+                <code>config/modems.yaml</code>, áp dụng ngay trên dashboard.
               </p>
               <ul class="phone-setup-list" id="phone-setup-list"></ul>
             </div>
-          </div>
+          </details>
         </section>
 
         <div class="split">
