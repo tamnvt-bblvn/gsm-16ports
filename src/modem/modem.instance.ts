@@ -8,7 +8,7 @@ import {
   SMS_RECEIVED_EVENT,
 } from '../common/events/app.events';
 import { normalizePhone } from '../common/utils/phone.util';
-import { AtCommandService } from './at-command.service';
+import { AtCommandService, type SimState } from './at-command.service';
 import { ModemConnectionStatus, ModemRuntimeState } from './modem.types';
 import { SimInboxParser } from './sim-inbox.parser';
 import { SmsParser } from './sms.parser';
@@ -32,6 +32,7 @@ export class ModemInstance {
   private failureCount = 0;
   private lastFailureLogAt = 0;
   private closingIntentionally = false;
+  private connectingInProgress = false;
 
   constructor(
     private readonly portName: string,
@@ -77,10 +78,11 @@ export class ModemInstance {
   }
 
   private async connect(): Promise<void> {
-    if (this.destroyed) {
+    if (this.destroyed || this.connectingInProgress) {
       return;
     }
 
+    this.connectingInProgress = true;
     this.updateStatus('connecting');
     await this.closePort(true);
 
@@ -115,7 +117,23 @@ export class ModemInstance {
         }
       });
 
-      await this.initializeModem();
+      const timeout = config.atCommandTimeoutMs;
+      await this.sendCommand('AT', timeout, true);
+
+      const simState = await this.probeSimPresence();
+      if (simState === 'absent') {
+        await this.handleNoSim();
+        return;
+      }
+
+      await this.sendCommand('AT+CMGF=1', timeout, true);
+      await this.sendCommand('AT+CNMI=2,2,0,0,0', timeout, true);
+      await this.refreshMetadata();
+      if (this.state.status === 'no_sim') {
+        return;
+      }
+      await this.syncSimInbox();
+
       this.failureCount = 0;
       this.updateStatus('online');
       this.logger.log(
@@ -128,7 +146,32 @@ export class ModemInstance {
       this.logThrottledFailure('connection_failed', message);
       this.updateStatus('offline');
       this.scheduleReconnect();
+    } finally {
+      this.connectingInProgress = false;
     }
+  }
+
+  private async probeSimPresence(): Promise<SimState> {
+    const timeout = this.modemConfigService.getConfig().atCommandTimeoutMs;
+    try {
+      const lines = await this.sendCommand('AT+CPIN?', timeout, true);
+      return this.atCommandService.parseSimState(lines.join('\n'));
+    } catch {
+      return 'other';
+    }
+  }
+
+  private async handleNoSim(): Promise<void> {
+    this.clearHealthTimer();
+    this.state.simReady = false;
+    this.state.signal = null;
+    this.state.operator = null;
+    this.updateStatus('no_sim');
+    this.logger.debug(`modem.no_sim port=${this.portName}`);
+    await this.closePort(true);
+    this.scheduleReconnect(
+      this.modemConfigService.getConfig().noSimReconnectIntervalMs,
+    );
   }
 
   private async detectPhoneNumber(): Promise<string | null> {
@@ -156,20 +199,9 @@ export class ModemInstance {
     return null;
   }
 
-  private async initializeModem(): Promise<void> {
-    // Init failures are expected on flaky/incompatible ports; the throttled
-    // connection_failed log already reports the reason, so keep these quiet.
-    const timeout = this.modemConfigService.getConfig().atCommandTimeoutMs;
-    await this.sendCommand('AT', timeout, true);
-    await this.sendCommand('AT+CMGF=1', timeout, true);
-    await this.sendCommand('AT+CNMI=2,2,0,0,0', timeout, true);
-    await this.refreshMetadata();
-    await this.syncSimInbox();
-  }
-
   private async syncSimInbox(): Promise<void> {
     const config = this.modemConfigService.getConfig();
-    if (!config.syncSimInboxOnConnect) {
+    if (!config.syncSimInboxOnConnect || !this.state.simReady) {
       return;
     }
 
@@ -218,9 +250,13 @@ export class ModemInstance {
     this.state.operator = this.atCommandService.parseOperator(
       copsLines.join('\n'),
     );
-    this.state.simReady = this.atCommandService.parseSimReady(
-      cpinLines.join('\n'),
-    );
+    const simState = this.atCommandService.parseSimState(cpinLines.join('\n'));
+    this.state.simReady = simState === 'ready';
+
+    if (simState === 'absent') {
+      await this.handleNoSim();
+      return;
+    }
 
     if (overridePhone) {
       this.state.phone = normalizePhone(overridePhone);
@@ -435,12 +471,18 @@ export class ModemInstance {
     this.scheduleReconnect();
   }
 
-  private scheduleReconnect(): void {
+  private scheduleReconnect(delayMs?: number): void {
     if (this.destroyed || this.reconnectTimer) {
       return;
     }
 
-    const delay = this.modemConfigService.getConfig().reconnectIntervalMs;
+    const config = this.modemConfigService.getConfig();
+    const delay =
+      delayMs ??
+      (this.state.status === 'no_sim'
+        ? config.noSimReconnectIntervalMs
+        : config.reconnectIntervalMs);
+
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       void this.connect();

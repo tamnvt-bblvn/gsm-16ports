@@ -72,6 +72,7 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
     online: number;
     offline: number;
     connecting: number;
+    noSim: number;
     disabled: number;
   } {
     const states = this.getAllStates();
@@ -80,8 +81,46 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
       online: states.filter((s) => s.status === 'online').length,
       offline: states.filter((s) => s.status === 'offline').length,
       connecting: states.filter((s) => s.status === 'connecting').length,
+      noSim: states.filter((s) => s.status === 'no_sim').length,
       disabled: states.filter((s) => s.status === 'disabled').length,
     };
+  }
+
+  async updatePortEnabled(
+    port: string,
+    enabled: boolean,
+  ): Promise<ModemRuntimeState> {
+    const normalizedPort = port.trim().toUpperCase();
+    const entry = this.modemConfigService.getEntry(normalizedPort);
+    if (!entry) {
+      throw new Error(`Unknown COM port: ${normalizedPort}`);
+    }
+
+    this.modemConfigService.updateEntryEnabled(normalizedPort, enabled);
+
+    const instance = this.instances.get(normalizedPort);
+    if (!enabled) {
+      if (instance) {
+        await instance.stop();
+        this.instances.delete(normalizedPort);
+      }
+    } else {
+      const config = this.modemConfigService.getConfig();
+      const listedPaths = config.autoDiscover
+        ? new Set((await SerialPort.list()).map((item) => item.path))
+        : null;
+
+      if (
+        !this.instances.has(normalizedPort) &&
+        (!listedPaths || listedPaths.has(normalizedPort))
+      ) {
+        await this.startInstance(normalizedPort);
+      }
+    }
+
+    const state = this.buildStateForPort(normalizedPort);
+    this.eventEmitter.emit(MODEM_STATUS_EVENT, state);
+    return state;
   }
 
   updatePortPhone(port: string, phone: string): ModemRuntimeState {

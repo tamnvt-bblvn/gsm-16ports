@@ -10,6 +10,7 @@ const connectionStatus = document.getElementById('connection-status');
 
 const statOnline = document.getElementById('stat-online');
 const statConnecting = document.getElementById('stat-connecting');
+const statNoSim = document.getElementById('stat-no-sim');
 const statDisabled = document.getElementById('stat-disabled');
 const statSimReady = document.getElementById('stat-sim-ready');
 
@@ -39,10 +40,20 @@ const sendSubmit = document.getElementById('send-submit');
 const sendHint = document.getElementById('send-hint');
 
 const phoneSetup = document.getElementById('phone-setup');
+const phoneSetupToggle = document.getElementById('phone-setup-toggle');
 const phoneSetupList = document.getElementById('phone-setup-list');
 const phoneSetupCount = document.getElementById('phone-setup-count');
+const PHONE_SETUP_COLLAPSED_KEY = 'gsm-phone-setup-collapsed';
 const drawerPhoneInput = document.getElementById('drawer-phone-input');
 const drawerPhoneSave = document.getElementById('drawer-phone-save');
+const drawerEnabledToggle = document.getElementById('drawer-enabled-toggle');
+const drawerEnabledLabel = document.getElementById('drawer-enabled-label');
+const enabledConfirmOverlay = document.getElementById('enabled-confirm-overlay');
+const enabledConfirmPort = document.getElementById('enabled-confirm-port');
+const enabledConfirmDesc = document.getElementById('enabled-confirm-desc');
+const enabledConfirmNote = document.getElementById('enabled-confirm-note');
+const enabledConfirmCancel = document.getElementById('enabled-confirm-cancel');
+const enabledConfirmOk = document.getElementById('enabled-confirm-ok');
 const phoneConfirmOverlay = document.getElementById('phone-confirm-overlay');
 const confirmPhone = document.getElementById('confirm-phone');
 const confirmPort = document.getElementById('confirm-port');
@@ -52,6 +63,8 @@ const confirmOk = document.getElementById('confirm-ok');
 const modems = new Map();
 const phoneDraftByPort = new Map();
 let pendingPhoneSave = null;
+let pendingEnabledSave = null;
+let suppressEnabledToggleEvent = false;
 let lastMissingPhonePortsKey = '';
 let smsMode = 'live';
 let searchPage = 1;
@@ -62,6 +75,7 @@ const STATUS_LABEL = {
   online: 'online',
   offline: 'offline',
   connecting: 'connecting',
+  no_sim: 'Chưa SIM',
   disabled: 'disabled',
 };
 
@@ -146,7 +160,12 @@ function setConnectionState(state, label) {
 }
 
 function isMissingPhone(modem) {
-  return modem.enabled !== false && modem.status !== 'disabled' && !modem.phone;
+  return (
+    modem.enabled !== false &&
+    modem.status !== 'disabled' &&
+    modem.status !== 'no_sim' &&
+    !modem.phone
+  );
 }
 
 function normalizePhoneInput(value) {
@@ -213,6 +232,34 @@ function requestPhoneSave(port, rawPhone) {
   openPhoneConfirm(port, phone);
 }
 
+function isPhoneSetupCollapsed() {
+  try {
+    return localStorage.getItem(PHONE_SETUP_COLLAPSED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function setPhoneSetupCollapsed(collapsed) {
+  phoneSetup.classList.toggle('is-collapsed', collapsed);
+  phoneSetupToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  try {
+    localStorage.setItem(PHONE_SETUP_COLLAPSED_KEY, collapsed ? '1' : '0');
+  } catch {
+    /* ignore storage errors */
+  }
+}
+
+function initPhoneSetupCollapse() {
+  setPhoneSetupCollapsed(isPhoneSetupCollapsed());
+}
+
+phoneSetupToggle.addEventListener('click', () => {
+  setPhoneSetupCollapsed(!phoneSetup.classList.contains('is-collapsed'));
+});
+
+initPhoneSetupCollapse();
+
 function capturePhoneDraftsFromDom() {
   for (const input of phoneSetupList.querySelectorAll('.phone-setup-input')) {
     if (input.dataset.port) {
@@ -277,6 +324,10 @@ function renderSimPill(modem) {
     return '<span class="sim-pill disabled">Tắt</span>';
   }
 
+  if (modem.status === 'no_sim') {
+    return '<span class="sim-pill empty">Empty</span>';
+  }
+
   return `<span class="sim-pill ${modem.simReady ? 'ready' : 'not-ready'}">${modem.simReady ? 'Ready' : 'Waiting'}</span>`;
 }
 
@@ -299,12 +350,14 @@ function updateStats() {
   const rows = [...modems.values()];
   const online = rows.filter((item) => item.status === 'online').length;
   const connecting = rows.filter((item) => item.status === 'connecting').length;
+  const noSim = rows.filter((item) => item.status === 'no_sim').length;
   const disabled = rows.filter((item) => item.status === 'disabled').length;
   const active = rows.length - disabled;
   const simReady = rows.filter((item) => item.simReady).length;
 
   statOnline.textContent = String(online);
   statConnecting.textContent = String(connecting);
+  statNoSim.textContent = String(noSim);
   statDisabled.textContent = String(disabled);
   statSimReady.textContent = String(simReady);
   modemCount.textContent = `${active} active · ${rows.length} total`;
@@ -543,6 +596,20 @@ document.addEventListener('click', (event) => {
 });
 
 /* ── Modem drawer ───────────────────────────────────────────────────── */
+function simDrawerLabel(modem) {
+  if (modem.status === 'disabled') return 'Tắt';
+  if (modem.status === 'no_sim') return 'Empty';
+  return modem.simReady ? 'Ready' : 'Waiting';
+}
+
+function syncDrawerEnabledToggle(modem) {
+  const enabled = modem.enabled !== false;
+  suppressEnabledToggleEvent = true;
+  drawerEnabledToggle.checked = enabled;
+  drawerEnabledLabel.textContent = enabled ? 'Bật' : 'Tắt';
+  suppressEnabledToggleEvent = false;
+}
+
 function renderDrawerDetail(modem) {
   drawerTitle.textContent = modem.port;
   const rows = [
@@ -550,7 +617,7 @@ function renderDrawerDetail(modem) {
     ['Operator', modem.operator ?? '—'],
     ['Signal', modem.signal == null ? '—' : String(modem.signal)],
     ['Phone', modem.phone ?? '—'],
-    ['SIM', modem.status === 'disabled' ? 'Tắt' : modem.simReady ? 'Ready' : 'Waiting'],
+    ['SIM', simDrawerLabel(modem)],
     ['Enabled', modem.enabled ? 'Có' : 'Không'],
   ];
   drawerDetail.innerHTML = rows
@@ -560,6 +627,8 @@ function renderDrawerDetail(modem) {
     )
     .join('');
 
+  syncDrawerEnabledToggle(modem);
+
   const canSend = modem.status === 'online';
   sendSubmit.disabled = !canSend;
   sendHint.className = 'send-hint';
@@ -567,7 +636,8 @@ function renderDrawerDetail(modem) {
     ? ''
     : 'Modem chưa online, không thể gửi SMS.';
 
-  drawerPhoneSave.disabled = modem.status === 'disabled';
+  const portDisabled = modem.status === 'disabled' || modem.enabled === false;
+  drawerPhoneSave.disabled = portDisabled;
 }
 
 function openDrawer(port) {
@@ -632,6 +702,89 @@ drawerPhoneSave.addEventListener('click', () => {
   requestPhoneSave(activeDrawerPort, drawerPhoneInput.value);
 });
 
+function openEnabledConfirm(port, enabled) {
+  pendingEnabledSave = { port, enabled };
+  enabledConfirmPort.textContent = port;
+  enabledConfirmDesc.innerHTML = enabled
+    ? `Bật lại monitor cho cổng <strong class="mono">${escapeHtml(port)}</strong>?`
+    : `Tắt monitor cho cổng <strong class="mono">${escapeHtml(port)}</strong>?`;
+  enabledConfirmNote.textContent = enabled
+    ? 'Service sẽ bắt đầu kết nối lại cổng nếu thiết bị có trong hệ thống. Thay đổi ghi vào config/modems.yaml.'
+    : 'Service sẽ ngừng monitor cổng và không reconnect. Thay đổi ghi vào config/modems.yaml.';
+  enabledConfirmOk.textContent = enabled ? 'Bật cổng' : 'Tắt cổng';
+  enabledConfirmOverlay.classList.remove('hidden');
+  enabledConfirmOverlay.hidden = false;
+  enabledConfirmOk.focus();
+}
+
+function closeEnabledConfirm() {
+  pendingEnabledSave = null;
+  enabledConfirmOverlay.classList.add('hidden');
+  enabledConfirmOverlay.hidden = true;
+}
+
+async function savePortEnabled(port, enabled) {
+  const res = await fetch(
+    `/api/modems/${encodeURIComponent(port)}/enabled`,
+    {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    },
+  );
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const message = Array.isArray(payload.message)
+      ? payload.message.join(', ')
+      : payload.message ?? 'Cập nhật cổng thất bại';
+    throw new Error(message);
+  }
+
+  modems.set(port, payload);
+  lastMissingPhonePortsKey = '';
+  renderModems();
+  showToast(
+    enabled ? `Đã bật monitor ${port}` : `Đã tắt monitor ${port}`,
+    'success',
+  );
+  return payload;
+}
+
+drawerEnabledToggle.addEventListener('change', () => {
+  if (suppressEnabledToggleEvent || !activeDrawerPort) return;
+  const modem = modems.get(activeDrawerPort);
+  if (!modem) return;
+
+  const nextEnabled = drawerEnabledToggle.checked;
+  syncDrawerEnabledToggle(modem);
+  openEnabledConfirm(activeDrawerPort, nextEnabled);
+});
+
+enabledConfirmCancel.addEventListener('click', closeEnabledConfirm);
+
+enabledConfirmOverlay.addEventListener('click', (event) => {
+  if (event.target === enabledConfirmOverlay) {
+    closeEnabledConfirm();
+  }
+});
+
+enabledConfirmOk.addEventListener('click', async () => {
+  if (!pendingEnabledSave) return;
+  const { port, enabled } = pendingEnabledSave;
+  enabledConfirmOk.disabled = true;
+  try {
+    const payload = await savePortEnabled(port, enabled);
+    closeEnabledConfirm();
+    if (activeDrawerPort === port) {
+      renderDrawerDetail(payload);
+    }
+  } catch (error) {
+    showToast(error.message ?? 'Cập nhật thất bại', 'error');
+  } finally {
+    enabledConfirmOk.disabled = false;
+  }
+});
+
 confirmCancel.addEventListener('click', closePhoneConfirm);
 
 phoneConfirmOverlay.addEventListener('click', (event) => {
@@ -658,6 +811,10 @@ confirmOk.addEventListener('click', async () => {
 });
 
 document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !enabledConfirmOverlay.classList.contains('hidden')) {
+    closeEnabledConfirm();
+    return;
+  }
   if (event.key === 'Escape' && !phoneConfirmOverlay.classList.contains('hidden')) {
     closePhoneConfirm();
     return;

@@ -32,7 +32,7 @@
           </div>
           <div>
             <h1 class="header-title">GSM OTP</h1>
-            <p class="header-sub">16-port monitor · COM3–COM18</p>
+            <p class="header-sub">16-port monitor · COM35–COM50</p>
           </div>
         </div>
 
@@ -45,6 +45,11 @@
           <div class="telemetry-item">
             <span class="telemetry-label">Connecting</span>
             <span class="telemetry-value telemetry-warn" id="stat-connecting">—</span>
+          </div>
+          <div class="telemetry-divider" aria-hidden="true"></div>
+          <div class="telemetry-item">
+            <span class="telemetry-label">No SIM</span>
+            <span class="telemetry-value telemetry-muted" id="stat-no-sim">—</span>
           </div>
           <div class="telemetry-divider" aria-hidden="true"></div>
           <div class="telemetry-item">
@@ -122,17 +127,30 @@
           </div>
 
           <div class="phone-setup hidden" id="phone-setup">
-            <div class="phone-setup-head">
-              <div>
-                <h3 class="phone-setup-title">Số SIM chưa cấu hình</h3>
-                <p class="phone-setup-desc">
-                  Gán số thủ công cho cổng đang thiếu. Lưu vào
-                  <code>config/modems.yaml</code>, không cần sửa code.
-                </p>
-              </div>
+            <button
+              type="button"
+              class="phone-setup-toggle"
+              id="phone-setup-toggle"
+              aria-expanded="true"
+              aria-controls="phone-setup-body"
+            >
+              <span class="phone-setup-toggle-main">
+                <span class="phone-setup-chevron" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M6 9l6 6 6-6"/>
+                  </svg>
+                </span>
+                <span class="phone-setup-title">Số SIM chưa cấu hình</span>
+              </span>
               <span class="phone-setup-count mono" id="phone-setup-count">0 cổng</span>
+            </button>
+            <div class="phone-setup-body" id="phone-setup-body">
+              <p class="phone-setup-desc">
+                Gán số thủ công cho cổng đang thiếu. Lưu vào
+                <code>config/modems.yaml</code>, không cần sửa code.
+              </p>
+              <ul class="phone-setup-list" id="phone-setup-list"></ul>
             </div>
-            <ul class="phone-setup-list" id="phone-setup-list"></ul>
           </div>
         </section>
 
@@ -239,6 +257,27 @@
 
       <dl class="spec-grid" id="drawer-detail"></dl>
 
+      <div class="port-control-block" id="drawer-port-control">
+        <div class="port-control-head">
+          <div>
+            <h3 class="port-control-title">Điều khiển cổng</h3>
+            <p class="port-control-desc">
+              Tắt khi cổng hỏng hoặc không dùng — không liên quan cắm/rút SIM.
+            </p>
+          </div>
+          <label class="cockpit-switch" for="drawer-enabled-toggle">
+            <input
+              type="checkbox"
+              id="drawer-enabled-toggle"
+              class="cockpit-switch-input"
+              checked
+            />
+            <span class="cockpit-switch-track" aria-hidden="true"></span>
+            <span class="cockpit-switch-label" id="drawer-enabled-label">Bật</span>
+          </label>
+        </div>
+      </div>
+
       <div class="phone-block" id="drawer-phone-block">
         <h3 class="phone-block-title">Số SIM cổng này</h3>
         <p class="phone-block-desc">
@@ -284,6 +323,37 @@
         <p class="send-status" id="send-hint"></p>
       </form>
     </aside>
+
+    <div class="modal-overlay hidden" id="enabled-confirm-overlay" hidden>
+      <div
+        class="modal"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="enabled-confirm-title"
+        aria-describedby="enabled-confirm-desc"
+      >
+        <div class="modal-icon" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 9v4M12 17h.01"/>
+            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+          </svg>
+        </div>
+        <h3 class="modal-title" id="enabled-confirm-title">Xác nhận điều khiển cổng</h3>
+        <p class="modal-body" id="enabled-confirm-desc">
+          Thay đổi trạng thái monitor cho cổng
+          <strong class="mono" id="enabled-confirm-port">COM—</strong>.
+        </p>
+        <p class="modal-note" id="enabled-confirm-note">
+          Thay đổi ghi vào <code>config/modems.yaml</code> và áp dụng ngay.
+        </p>
+        <div class="modal-actions">
+          <button type="button" class="btn" id="enabled-confirm-cancel">Hủy</button>
+          <button type="button" class="btn btn-accent" id="enabled-confirm-ok">
+            Xác nhận
+          </button>
+        </div>
+      </div>
+    </div>
 
     <div class="modal-overlay hidden" id="phone-confirm-overlay" hidden>
       <div

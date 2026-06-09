@@ -1,70 +1,64 @@
 modems:
+  autoDiscover: true
+  portRange:
+    from: COM35
+    to: COM50
+  baudRate: 115200
+  reconnectIntervalMs: 5000
+  noSimReconnectIntervalMs: 60000
+  healthCheckIntervalMs: 30000
+  atCommandTimeoutMs: 5000
   connectionStaggerMs: 300
   logThrottleMs: 60000
   syncSimInboxOnConnect: true
   simSyncTimeoutMs: 30000
   smsSendTimeoutMs: 15000
-  autoDiscover: true
-  portRange:
-    from: COM3
-    to: COM18
-  baudRate: 115200
-  reconnectIntervalMs: 5000
-  healthCheckIntervalMs: 30000
-  atCommandTimeoutMs: 5000
   entries:
-    - port: COM3
-      enabled: true
-      phone: "0982200073"
-    - port: COM4
-      enabled: true
-      phone: "0929367167"
-    - port: COM5
+    - port: COM35
       enabled: true
       phone: ""
-    - port: COM6
+    - port: COM36
       enabled: true
       phone: ""
-    - port: COM7
-      enabled: true
-      phone: "0924033230"
-    - port: COM8
-      enabled: false
-      phone: ""
-      note: Không cắm SIM
-    - port: COM9
+    - port: COM37
       enabled: true
       phone: ""
-    - port: COM10
+    - port: COM38
       enabled: true
       phone: ""
-    - port: COM11
-      enabled: true
-      phone: "0865100016"
-    - port: COM12
-      enabled: false
-      phone: ""
-      note: Không cắm SIM
-    - port: COM13
-      enabled: false
-      phone: ""
-      note: Không cắm SIM
-    - port: COM14
-      enabled: false
-      phone: ""
-      note: Không cắm SIM
-    - port: COM15
+    - port: COM39
       enabled: true
       phone: ""
-    - port: COM16
-      enabled: false
+    - port: COM40
+      enabled: true
       phone: ""
-      note: Không cắm SIM
-    - port: COM17
-      enabled: false
+    - port: COM41
+      enabled: true
       phone: ""
-      note: Không cắm SIM
-    - port: COM18
-      enabled: false
+    - port: COM42
+      enabled: true
       phone: ""
-      note: Không cắm SIM
+    - port: COM43
+      enabled: true
+      phone: ""
+    - port: COM44
+      enabled: true
+      phone: ""
+    - port: COM45
+      enabled: true
+      phone: ""
+    - port: COM46
+      enabled: true
+      phone: ""
+    - port: COM47
+      enabled: true
+      phone: ""
+    - port: COM48
+      enabled: true
+      phone: ""
+    - port: COM49
+      enabled: true
+      phone: ""
+    - port: COM50
+      enabled: true
+      phone: ""

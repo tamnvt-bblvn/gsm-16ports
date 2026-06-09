@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
+export type SimState = 'ready' | 'absent' | 'other';
+
 @Injectable()
 export class AtCommandService {
   parseSignal(response: string): number | null {
@@ -26,7 +28,29 @@ export class AtCommandService {
   }
 
   parseSimReady(response: string): boolean {
-    return /\+CPIN:\s*READY/i.test(response);
+    return this.parseSimState(response) === 'ready';
+  }
+
+  parseSimState(response: string): SimState {
+    const text = response.toUpperCase();
+
+    if (/\+CPIN:\s*READY/.test(text)) {
+      return 'ready';
+    }
+
+    if (
+      /\+CPIN:\s*NOT\s+INSERTED/.test(text) ||
+      /\+CME\s+ERROR:\s*10\b/.test(text) ||
+      /\+CME\s+ERROR:\s*13\b/.test(text)
+    ) {
+      return 'absent';
+    }
+
+    if (/\+CPIN:/.test(text) || /\+CME\s+ERROR:/.test(text)) {
+      return 'other';
+    }
+
+    return 'other';
   }
 
   parsePhoneNumber(response: string): string | null {

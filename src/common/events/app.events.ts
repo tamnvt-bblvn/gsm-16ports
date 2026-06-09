@@ -21,7 +21,7 @@ export interface OtpReceivedPayload {
 
 export interface ModemStatusPayload {
   port: string;
-  status: 'online' | 'offline' | 'connecting' | 'disabled';
+  status: 'online' | 'offline' | 'connecting' | 'no_sim' | 'disabled';
   signal: number | null;
   operator: string | null;
   simReady: boolean;

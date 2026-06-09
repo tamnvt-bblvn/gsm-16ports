@@ -2,6 +2,7 @@ export type ModemConnectionStatus =
   | 'online'
   | 'offline'
   | 'connecting'
+  | 'no_sim'
   | 'disabled';
 
 export interface ModemRuntimeState {

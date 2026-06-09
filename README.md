@@ -1,6 +1,6 @@
 # GSM OTP Service (16 cổng)
 
-Service Windows-native quản lý 16 modem GSM qua USB (COM3–COM18), nhận SMS realtime, tách OTP, lưu PostgreSQL và cung cấp REST API + dashboard hiện đại. Có thể gửi SMS, đẩy OTP qua webhook và bảo vệ API bằng API key.
+Service Windows-native quản lý 16 modem GSM qua USB (COM35–COM50), nhận SMS realtime, tách OTP, lưu PostgreSQL và cung cấp REST API + dashboard hiện đại. Có thể gửi SMS, đẩy OTP qua webhook và bảo vệ API bằng API key.
 
 ## Tính năng
 
@@ -23,7 +23,7 @@ Service Windows-native quản lý 16 modem GSM qua USB (COM3–COM18), nhận SM
 - Node.js 20.19+ / 22.12+ / 24+ (khuyến nghị LTS mới nhất)
 - pnpm 10+ (`corepack enable` rồi `corepack prepare pnpm@latest --activate`)
 - PostgreSQL 15+ (native hoặc Docker)
-- Thiết bị GSM 16 cổng với driver USB (COM3–COM18)
+- Thiết bị GSM 16 cổng với driver USB (COM35–COM50, hoặc chỉnh trong `modems.yaml`)
 
 ## Cài đặt nhanh
 
@@ -76,23 +76,35 @@ Chỉnh [`config/modems.yaml`](config/modems.yaml):
 modems:
   autoDiscover: true
   portRange:
-    from: COM3
-    to: COM18
-  connectionStaggerMs: 300     # mở từng cổng cách nhau 300ms
-  logThrottleMs: 60000         # giảm log lặp khi reconnect
-  syncSimInboxOnConnect: true  # đọc SMS đã lưu trên SIM khi kết nối
-  smsSendTimeoutMs: 15000      # timeout khi gửi SMS
+    from: COM35
+    to: COM50
+  reconnectIntervalMs: 5000        # reconnect nhanh khi offline / mất kết nối
+  noSimReconnectIntervalMs: 60000  # reconnect chậm khi không có SIM (no_sim)
+  connectionStaggerMs: 300         # mở từng cổng cách nhau 300ms
+  logThrottleMs: 60000             # giảm log lặp khi reconnect
+  syncSimInboxOnConnect: true      # đọc SMS đã lưu trên SIM khi kết nối
+  smsSendTimeoutMs: 15000          # timeout khi gửi SMS
   entries:
-    - port: COM3
+    - port: COM35
       enabled: true
-      phone: ""                # để trống = auto AT+CNUM / AT+CPBR
-    - port: COM8
-      enabled: false           # không cắm SIM → không kết nối, không spam log
+      phone: ""                    # để trống = auto AT+CNUM / AT+CPBR
+    - port: COM40
+      enabled: false               # cổng hỏng / admin tắt — không monitor
       phone: ""
-    - port: COM11
+    - port: COM41
       enabled: true
-      phone: "0865100016"      # override số SIM thủ công
+      phone: "0865100016"          # override số SIM thủ công
 ```
+
+### `enabled` vs `no_sim`
+
+| Khái niệm | Ý nghĩa |
+|----------|---------|
+| `enabled: true` | Service **monitor** cổng COM (mặc định cho cả 16 cổng) |
+| `enabled: false` | **Tắt hẳn** monitor — dùng khi cổng hỏng hoặc không dùng; ghi yaml hoặc toggle trên dashboard |
+| Trạng thái `no_sim` | Cổng **đang bật** nhưng **không có SIM** (`AT+CPIN?` → NOT INSERTED); reconnect mỗi 60s, **không** spam `AT+CMGL` |
+
+**Cắm/rút SIM không cần sửa yaml.** Giữ `enabled: true`; service tự chuyển `no_sim` ↔ `online` trong vòng ~60s.
 
 ### 6. Chạy service
 
@@ -127,8 +139,10 @@ Swagger: `http://localhost:3000/api/docs`
 |--------|----------|-------|
 | GET | `/api/health` | Health check (DB + modem) — public |
 | GET | `/api/modems` | Danh sách modem + trạng thái |
-| GET | `/api/modems/summary` | Tổng hợp số modem theo trạng thái |
+| GET | `/api/modems/summary` | Tổng hợp số modem theo trạng thái (gồm `noSim`) |
 | GET | `/api/modems/:port` | Chi tiết một modem |
+| PATCH | `/api/modems/:port/enabled` | Bật/tắt monitor cổng, ghi `modems.yaml` |
+| PATCH | `/api/modems/:port/phone` | Gán số SIM override, ghi `modems.yaml` |
 | POST | `/api/modems/:port/send-sms` | Gửi SMS qua modem |
 | GET | `/api/otp/latest?phone=098xxx` | OTP mới nhất theo số SIM |
 | GET | `/api/otp/latest?port=COM3` | OTP mới nhất theo COM |
@@ -179,7 +193,9 @@ Khi đặt `OTP_WEBHOOK_URL`, mỗi OTP mới được POST dạng:
 
 Mở `http://localhost:3000/`:
 
-- Tổng quan + trạng thái 16 modem (bấm vào modem để xem chi tiết & gửi SMS)
+- Telemetry: Online, Connecting, **No SIM**, Disabled, SIM ready
+- Bảng fleet: badge `Chưa SIM` / SIM pill **Empty** cho cổng không SIM
+- Drawer modem: toggle **Bật/Tắt cổng** (confirm + ghi yaml), nhập số SIM, gửi SMS
 - Tìm kiếm/lọc SMS theo nội dung, cổng, chỉ OTP, có phân trang
 - Feed OTP realtime, bấm để copy
 - Toggle giao diện sáng/tối, toast thông báo
@@ -214,9 +230,20 @@ Log ghi vào `logs/gsm-otp.log` (JSON) và console (pretty ở dev). Request t�
 ## Ghi chú vận hành
 
 - Mỗi COM port chạy một `ModemInstance` độc lập
-- Khi rút/cắm lại USB, service tự reconnect sau `reconnectIntervalMs`
-- Nếu `AT+CNUM` không trả số, override `phone` trong `config/modems.yaml`
+- Sau khi mở port, service probe `AT+CPIN?` sớm: không SIM → `no_sim`, đóng port, reconnect sau `noSimReconnectIntervalMs` (60s)
+- Cắm SIM vào cổng `no_sim`: lần reconnect tiếp theo init đầy đủ → `online` (thường ≤60s)
+- Khi rút/cắm lại USB, service tự reconnect sau `reconnectIntervalMs` (5s)
+- Nếu `AT+CNUM` không trả số, override `phone` trong `config/modems.yaml` hoặc dashboard
 - Service cần chạy với quyền truy cập COM port (thường không cần admin)
+
+## Kiểm thử thủ công (SIM-aware)
+
+1. **Cổng không SIM** — Chờ kết nối xong: status ổn định `no_sim` (không kẹt `connecting`); telemetry No SIM tăng; không log spam `AT+CMGL`.
+2. **Cắm SIM** — Trên cổng đang `no_sim`: trong ≤60s chuyển `online`, SIM pill Ready (nếu CPIN OK).
+3. **Rút SIM khi online** — Health check phát hiện CPIN absent → `no_sim`, reconnect 60s.
+4. **Toggle tắt cổng** — Dashboard drawer → Tắt cổng → confirm → status `disabled`, không reconnect; `modems.yaml` có `enabled: false`.
+5. **Toggle bật lại** — Bật cổng → confirm → instance khởi động lại, reconnect bình thường.
+6. **API** — `GET /api/modems/summary` có field `noSim`; `PATCH /api/modems/COM35/enabled` body `{"enabled":false}`.
 
 ## Bàn giao
 
@@ -226,4 +253,3 @@ Log ghi vào `logs/gsm-otp.log` (JSON) và console (pretty ở dev). Request t�
 - `docker-compose.yml` + `Dockerfile`
 - CI pipeline, Swagger tại `/api/docs`
 - Hướng dẫn deploy trong README này
-```

@@ -16,12 +16,14 @@ const DEFAULT_CONFIG: Pick<
   | 'syncSimInboxOnConnect'
   | 'simSyncTimeoutMs'
   | 'smsSendTimeoutMs'
+  | 'noSimReconnectIntervalMs'
 > = {
   connectionStaggerMs: 300,
   logThrottleMs: 60_000,
   syncSimInboxOnConnect: true,
   simSyncTimeoutMs: 30_000,
   smsSendTimeoutMs: 15_000,
+  noSimReconnectIntervalMs: 60_000,
 };
 
 @Injectable()
@@ -75,6 +77,25 @@ export class ModemConfigService implements OnModuleInit {
   getPhoneOverride(port: string): string | undefined {
     const phone = this.getEntry(port)?.phone?.trim();
     return phone || undefined;
+  }
+
+  updateEntryEnabled(port: string, enabled: boolean): void {
+    const normalizedPort = port.trim().toUpperCase();
+    const entries = this.config.entries ?? [];
+    let entry = entries.find((item) => item.port === normalizedPort);
+
+    if (!entry) {
+      entry = { port: normalizedPort, enabled, phone: '' };
+      entries.push(entry);
+      this.config.entries = entries;
+    } else {
+      entry.enabled = enabled;
+    }
+
+    this.persistConfig();
+    this.logger.log(
+      `Updated enabled=${enabled} for ${normalizedPort}`,
+    );
   }
 
   updateEntryPhone(port: string, phone: string): void {

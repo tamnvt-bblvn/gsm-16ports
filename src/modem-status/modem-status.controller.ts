@@ -13,6 +13,7 @@ import { ApiOkResponse, ApiParam, ApiTags } from '@nestjs/swagger';
 import { ModemManager } from '../modem/modem.manager';
 import type { ModemRuntimeState } from '../modem/modem.types';
 import { SendSmsDto } from './dto/send-sms.dto';
+import { UpdateModemEnabledDto } from './dto/update-modem-enabled.dto';
 import { UpdateModemPhoneDto } from './dto/update-modem-phone.dto';
 
 @ApiTags('modems')
@@ -43,6 +44,27 @@ export class ModemStatusController {
       throw new NotFoundException(`Unknown COM port: ${port}`);
     }
     return state;
+  }
+
+  @Patch(':port/enabled')
+  @ApiParam({ name: 'port', example: 'COM35' })
+  @ApiOkResponse({
+    description: 'Enable or disable port monitoring and persist to modems.yaml',
+  })
+  async updateEnabled(
+    @Param('port') port: string,
+    @Body() body: UpdateModemEnabledDto,
+  ): Promise<ModemRuntimeState> {
+    try {
+      return await this.modemManager.updatePortEnabled(port, body.enabled);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Enable update failed';
+      if (message.includes('Unknown COM port')) {
+        throw new NotFoundException(message);
+      }
+      throw new BadRequestException(message);
+    }
   }
 
   @Patch(':port/phone')

@@ -13,6 +13,7 @@ export interface ModemConfig {
   };
   baudRate: number;
   reconnectIntervalMs: number;
+  noSimReconnectIntervalMs: number;
   healthCheckIntervalMs: number;
   atCommandTimeoutMs: number;
   connectionStaggerMs: number;
