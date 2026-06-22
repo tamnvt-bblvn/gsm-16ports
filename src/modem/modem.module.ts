@@ -6,6 +6,6 @@ import { SmsParser } from './sms.parser';
 
 @Module({
   providers: [AtCommandService, SmsParser, SimInboxParser, ModemManager],
-  exports: [ModemManager, SmsParser],
+  exports: [ModemManager, SmsParser, AtCommandService],
 })
 export class ModemModule {}

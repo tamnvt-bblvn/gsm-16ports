@@ -1,64 +1,64 @@
 modems:
-  autoDiscover: true
-  portRange:
-    from: COM35
-    to: COM50
-  baudRate: 115200
-  reconnectIntervalMs: 5000
-  noSimReconnectIntervalMs: 60000
-  healthCheckIntervalMs: 30000
-  atCommandTimeoutMs: 5000
   connectionStaggerMs: 300
   logThrottleMs: 60000
   syncSimInboxOnConnect: true
   simSyncTimeoutMs: 30000
   smsSendTimeoutMs: 15000
+  noSimReconnectIntervalMs: 60000
+  autoDiscover: true
+  portRange:
+    from: COM1
+    to: COM50
+  baudRate: 115200
+  reconnectIntervalMs: 5000
+  healthCheckIntervalMs: 30000
+  atCommandTimeoutMs: 5000
   entries:
-    - port: COM35
+    - port: COM5
       enabled: true
       phone: ""
-    - port: COM36
+    - port: COM17
       enabled: true
       phone: ""
-    - port: COM37
+    - port: COM9
       enabled: true
       phone: ""
-    - port: COM38
+    - port: COM12
       enabled: true
       phone: ""
-    - port: COM39
+    - port: COM15
       enabled: true
       phone: ""
-    - port: COM40
+    - port: COM14
       enabled: true
       phone: ""
-    - port: COM41
+    - port: COM6
       enabled: true
       phone: ""
-    - port: COM42
+    - port: COM8
       enabled: true
       phone: ""
-    - port: COM43
+    - port: COM7
       enabled: true
       phone: ""
-    - port: COM44
+    - port: COM13
       enabled: true
       phone: ""
-    - port: COM45
+    - port: COM10
       enabled: true
       phone: ""
-    - port: COM46
+    - port: COM18
       enabled: true
       phone: ""
-    - port: COM47
+    - port: COM11
       enabled: true
       phone: ""
-    - port: COM48
+    - port: COM3
       enabled: true
       phone: ""
-    - port: COM49
+    - port: COM4
       enabled: true
       phone: ""
-    - port: COM50
+    - port: COM16
       enabled: true
       phone: ""

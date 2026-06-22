@@ -410,10 +410,13 @@ function renderModems() {
       (modem) => {
         const phoneClass = isMissingPhone(modem) ? 'phone-missing' : 'phone-known';
         const phoneLabel = modem.phone ?? '-';
+        const errorBadge = modem.lastError
+          ? `<span class="error-badge" title="${escapeHtml(modem.lastError)}">⚠</span>`
+          : '';
         return `
       <tr class="clickable" data-port="${escapeHtml(modem.port)}" tabindex="0" role="button" aria-label="Chi tiết ${escapeHtml(modem.port)}">
         <td class="mono">${escapeHtml(modem.port)}</td>
-        <td><span class="status-badge status-${escapeHtml(modem.status)}">${escapeHtml(STATUS_LABEL[modem.status] ?? modem.status)}</span></td>
+        <td><span class="status-badge status-${escapeHtml(modem.status)}">${escapeHtml(STATUS_LABEL[modem.status] ?? modem.status)}</span>${errorBadge}</td>
         <td>${renderSignalBars(modem.signal)}</td>
         <td>${escapeHtml(modem.operator ?? '-')}</td>
         <td class="mono ${phoneClass}">${escapeHtml(phoneLabel)}</td>
@@ -674,7 +677,7 @@ function renderDrawerDetail(modem) {
         : 'warn';
 
   if (drawerMetrics) {
-    drawerMetrics.innerHTML = [
+    const metrics = [
       renderDrawerMetric(
         'Signal',
         modem.signal == null ? '—' : String(modem.signal),
@@ -682,8 +685,15 @@ function renderDrawerDetail(modem) {
       renderDrawerMetric('Operator', modem.operator ?? '—'),
       renderDrawerMetric('Phone', modem.phone ?? '—', modem.phone ? '' : 'warn'),
       renderDrawerMetric('SIM', simLabel, simTone),
+      renderDrawerMetric('ICCID', modem.iccid ? modem.iccid.slice(0, 10) + '…' : '—'),
       renderDrawerMetric('Monitor', enabledLabel, enabledTone),
-    ].join('');
+    ];
+
+    if (modem.lastError) {
+      metrics.push(renderDrawerMetric('Lỗi gần nhất', modem.lastError, 'error'));
+    }
+
+    drawerMetrics.innerHTML = metrics.join('');
   }
 
   syncDrawerEnabledToggle(modem);
@@ -989,13 +999,25 @@ on(sendForm, 'submit', async (event) => {
     sendMessage.value = '';
     showToast(`SMS đã gửi qua ${activeDrawerPort}`, 'success');
   } catch (error) {
-    const text = Array.isArray(error.message)
-      ? error.message.join(', ')
-      : error.message;
+    let text = '';
+    let suggestion = '';
+    if (error.message) {
+      try {
+        const parsed = JSON.parse(error.message);
+        text = parsed.message ?? error.message;
+        suggestion = parsed.details?.suggestion ?? '';
+      } catch {
+        text = Array.isArray(error.message)
+          ? error.message.join(', ')
+          : error.message;
+      }
+    } else {
+      text = 'Gửi SMS thất bại';
+    }
     sendHint.className = 'drawer-alert is-error';
     sendHint.classList.remove('hidden');
-    sendHint.textContent = text;
-    showToast(text, 'error');
+    sendHint.innerHTML = `<strong>${escapeHtml(text)}</strong>${suggestion ? `<br><small class="error-suggestion">💡 ${escapeHtml(suggestion)}</small>` : ''}`;
+    showToast(text, 'error', 6000);
   } finally {
     sendSubmit.disabled = false;
   }
@@ -1040,6 +1062,15 @@ function connectSocket() {
       buildOtpItem(otp.port, otp.otp, formatDate(otp.receivedAt)),
     );
     showToast(`OTP ${otp.otp} · ${otp.port}`, 'success', 5000);
+  });
+
+  socket.on('sim.changed', (data) => {
+    const phoneInfo = data.newPhone
+      ? `Số mới: ${data.newPhone}`
+      : 'Chưa detect được số — cần nhập thủ công';
+    showToast(`🔄 SIM thay đổi tại ${data.port}. ${phoneInfo}`, data.newPhone ? 'info' : 'error', 8000);
+    // Refresh modem list to update UI
+    loadModems().catch(() => {});
   });
 
   setInterval(async () => {

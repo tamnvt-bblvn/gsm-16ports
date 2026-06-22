@@ -22,6 +22,7 @@ import { SmsParser } from './sms.parser';
 export class ModemManager implements OnModuleInit, OnModuleDestroy {
   private instances = new Map<string, ModemInstance>();
   private discoveryTimer: NodeJS.Timeout | null = null;
+  private knownSystemPorts = new Set<string>();
 
   constructor(
     private readonly modemConfigService: ModemConfigService,
@@ -35,7 +36,7 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    await this.syncConfiguredPorts();
+    await this.discoverAndSync();
     this.startDiscoveryLoop();
   }
 
@@ -52,16 +53,31 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
   }
 
   getAllStates(): ModemRuntimeState[] {
-    return this.modemConfigService
-      .getEntries()
-      .map((entry) => this.buildStateForPort(entry.port))
+    // Combine configured entries + any discovered ports with running instances
+    const portSet = new Set<string>();
+
+    // Add all configured entries
+    for (const entry of this.modemConfigService.getEntries()) {
+      portSet.add(entry.port);
+    }
+
+    // Add all currently running instances (auto-discovered)
+    for (const port of this.instances.keys()) {
+      portSet.add(port);
+    }
+
+    return [...portSet]
+      .map((port) => this.buildStateForPort(port))
       .sort((a, b) =>
         a.port.localeCompare(b.port, undefined, { numeric: true }),
       );
   }
 
   getState(port: string): ModemRuntimeState | null {
-    if (!this.modemConfigService.getEntry(port)) {
+    const hasEntry = !!this.modemConfigService.getEntry(port);
+    const hasInstance = this.instances.has(port);
+
+    if (!hasEntry && !hasInstance) {
       return null;
     }
     return this.buildStateForPort(port);
@@ -91,11 +107,9 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
     enabled: boolean,
   ): Promise<ModemRuntimeState> {
     const normalizedPort = port.trim().toUpperCase();
-    const entry = this.modemConfigService.getEntry(normalizedPort);
-    if (!entry) {
-      throw new Error(`Unknown COM port: ${normalizedPort}`);
-    }
 
+    // Ensure entry exists (auto-discover may not have created one yet)
+    this.modemConfigService.ensureEntry(normalizedPort);
     this.modemConfigService.updateEntryEnabled(normalizedPort, enabled);
 
     const instance = this.instances.get(normalizedPort);
@@ -105,16 +119,14 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
         this.instances.delete(normalizedPort);
       }
     } else {
-      const config = this.modemConfigService.getConfig();
-      const listedPaths = config.autoDiscover
-        ? new Set((await SerialPort.list()).map((item) => item.path))
-        : null;
-
-      if (
-        !this.instances.has(normalizedPort) &&
-        (!listedPaths || listedPaths.has(normalizedPort))
-      ) {
-        await this.startInstance(normalizedPort);
+      if (!this.instances.has(normalizedPort)) {
+        // Check if port exists on system
+        const systemPorts = new Set(
+          (await SerialPort.list()).map((item) => item.path),
+        );
+        if (systemPorts.has(normalizedPort)) {
+          await this.startInstance(normalizedPort);
+        }
       }
     }
 
@@ -125,10 +137,9 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
 
   updatePortPhone(port: string, phone: string): ModemRuntimeState {
     const normalizedPort = port.trim().toUpperCase();
-    const entry = this.modemConfigService.getEntry(normalizedPort);
-    if (!entry) {
-      throw new Error(`Unknown COM port: ${normalizedPort}`);
-    }
+
+    // Ensure entry exists
+    this.modemConfigService.ensureEntry(normalizedPort);
 
     const normalizedPhone = normalizePhone(phone);
     if (!normalizedPhone) {
@@ -153,14 +164,9 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
     phone: string,
     message: string,
   ): Promise<{ port: string; phone: string; reference: number }> {
-    const entry = this.modemConfigService.getEntry(port);
-    if (!entry) {
-      throw new Error(`Unknown COM port: ${port}`);
-    }
-
     const instance = this.instances.get(port);
     if (!instance) {
-      throw new Error(`Modem ${port} is not connected`);
+      throw new Error(`Modem ${port} chưa kết nối`);
     }
 
     const reference = await instance.sendSms(phone, message);
@@ -182,6 +188,7 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
         signal: payload.signal,
         operator: payload.operator,
         simReady: payload.simReady,
+        iccid: payload.iccid,
       },
       update: {
         phone: payload.phone,
@@ -189,6 +196,7 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
         signal: payload.signal,
         operator: payload.operator,
         simReady: payload.simReady,
+        iccid: payload.iccid,
       },
     });
   }
@@ -207,6 +215,8 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
         operator: null,
         simReady: false,
         phone: phoneOverride,
+        iccid: null,
+        lastError: null,
         enabled: false,
       };
     }
@@ -223,12 +233,76 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
       operator: null,
       simReady: false,
       phone: phoneOverride,
+      iccid: null,
+      lastError: null,
       enabled: true,
     };
   }
 
-  private async syncConfiguredPorts(): Promise<void> {
+  /**
+   * Discover all COM ports on the system and sync with running instances.
+   * When autoDiscover is enabled, scans ALL system COM ports.
+   * New ports → auto-create config entry + start instance.
+   * Removed ports → stop instance.
+   */
+  private async discoverAndSync(): Promise<void> {
     const config = this.modemConfigService.getConfig();
+
+    if (config.autoDiscover) {
+      await this.autoDiscoverPorts(config);
+    } else {
+      await this.syncConfiguredPorts(config);
+    }
+  }
+
+  /**
+   * Auto-discover mode: scan ALL system COM ports.
+   */
+  private async autoDiscoverPorts(
+    config: ReturnType<ModemConfigService['getConfig']>,
+  ): Promise<void> {
+    const systemPorts = (await SerialPort.list()).map((item) => item.path);
+    const systemPortSet = new Set(systemPorts);
+    const previousPorts = new Set(this.knownSystemPorts);
+    this.knownSystemPorts = systemPortSet;
+
+    // Detect newly appeared ports
+    for (const port of systemPorts) {
+      if (!this.instances.has(port)) {
+        if (this.modemConfigService.isPortEnabled(port)) {
+          // Ensure entry exists in config (persists phone override etc.)
+          this.modemConfigService.ensureEntry(port);
+
+          if (!previousPorts.size || !previousPorts.has(port)) {
+            this.logger.info(`modem.auto_discovered port=${port}`);
+          }
+
+          await this.startInstance(port);
+          await this.sleep(config.connectionStaggerMs);
+        }
+      }
+    }
+
+    // Stop instances for ports that disappeared from system
+    for (const [port, instance] of this.instances.entries()) {
+      if (!systemPortSet.has(port)) {
+        this.logger.info(`modem.port_removed port=${port}`);
+        await instance.stop();
+        this.instances.delete(port);
+        this.eventEmitter.emit(
+          MODEM_STATUS_EVENT,
+          this.buildStateForPort(port),
+        );
+      }
+    }
+  }
+
+  /**
+   * Manual mode: sync using configured entries.
+   */
+  private async syncConfiguredPorts(
+    config: ReturnType<ModemConfigService['getConfig']>,
+  ): Promise<void> {
     const allPorts = this.modemConfigService
       .getEntries()
       .map((entry) => entry.port);
@@ -236,25 +310,15 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
       .getActiveEntries()
       .map((entry) => entry.port);
 
-    const listedPaths = config.autoDiscover
-      ? new Set((await SerialPort.list()).map((item) => item.path))
-      : null;
-
     for (const port of activePorts) {
-      const shouldStart =
-        !this.instances.has(port) && (!listedPaths || listedPaths.has(port));
-
-      if (shouldStart) {
+      if (!this.instances.has(port)) {
         await this.startInstance(port);
         await this.sleep(config.connectionStaggerMs);
       }
     }
 
     for (const [port, instance] of this.instances.entries()) {
-      const shouldStop =
-        !activePorts.includes(port) || (listedPaths && !listedPaths.has(port));
-
-      if (shouldStop) {
+      if (!activePorts.includes(port)) {
         await instance.stop();
         this.instances.delete(port);
       }
@@ -272,7 +336,7 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
 
   private startDiscoveryLoop(): void {
     this.discoveryTimer = setInterval(() => {
-      void this.syncConfiguredPorts();
+      void this.discoverAndSync();
     }, this.modemConfigService.getConfig().reconnectIntervalMs);
   }
 
@@ -302,3 +366,4 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
+

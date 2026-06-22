@@ -1144,7 +1144,7 @@ textarea.input {
 
 .drawer-metrics {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
   gap: 1px;
   margin-bottom: 14px;
   border: 1px solid var(--line);
@@ -1189,6 +1189,41 @@ textarea.input {
 
 .drawer-metric-value-muted {
   color: var(--text-tertiary);
+}
+
+.drawer-metric-value-error {
+  color: var(--danger);
+  font-size: 10px;
+  word-break: break-word;
+  white-space: normal;
+}
+
+/* ── Error badge (table) ─────────────────────────────────────────────── */
+
+.error-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 11px;
+  background: var(--danger-dim);
+  color: var(--danger);
+  cursor: help;
+  vertical-align: middle;
+  border: 1px solid rgba(251, 113, 133, 0.28);
+}
+
+/* ── Error suggestion in drawer ──────────────────────────────────────── */
+
+.error-suggestion {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.45;
 }
 
 .drawer-stack {

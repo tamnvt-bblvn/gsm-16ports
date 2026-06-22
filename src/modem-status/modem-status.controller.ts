@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiOkResponse, ApiParam, ApiTags } from '@nestjs/swagger';
 import { ModemManager } from '../modem/modem.manager';
+import { AtCommandService } from '../modem/at-command.service';
 import type { ModemRuntimeState } from '../modem/modem.types';
 import { SendSmsDto } from './dto/send-sms.dto';
 import { UpdateModemEnabledDto } from './dto/update-modem-enabled.dto';
@@ -19,7 +20,10 @@ import { UpdateModemPhoneDto } from './dto/update-modem-phone.dto';
 @ApiTags('modems')
 @Controller('api/modems')
 export class ModemStatusController {
-  constructor(private readonly modemManager: ModemManager) {}
+  constructor(
+    private readonly modemManager: ModemManager,
+    private readonly atCommandService: AtCommandService,
+  ) {}
 
   @Get()
   @ApiOkResponse({
@@ -95,10 +99,36 @@ export class ModemStatusController {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'SMS send failed';
+
+      // Parse structured error info for detailed response
+      const errorInfo = this.atCommandService.parseErrorCode(
+        message.split(/[|;]/).map((s) => s.trim()),
+      );
+
       if (message.includes('Unknown COM port')) {
         throw new NotFoundException(message);
       }
-      throw new ServiceUnavailableException(message);
+
+      throw new ServiceUnavailableException({
+        statusCode: 503,
+        error: 'Service Unavailable',
+        message,
+        details: errorInfo
+          ? {
+              port,
+              errorCode: `${errorInfo.type === 'cms_error' ? 'CMS' : errorInfo.type === 'cme_error' ? 'CME' : 'ERR'}_${errorInfo.code ?? 'UNKNOWN'}`,
+              errorType: errorInfo.type,
+              description: errorInfo.description,
+              suggestion: errorInfo.suggestion,
+            }
+          : {
+              port,
+              errorType: 'unknown',
+              description: message,
+              suggestion: 'Kiểm tra trạng thái modem và thử lại',
+            },
+      });
     }
   }
 }
+

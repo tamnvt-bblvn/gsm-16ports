@@ -12,5 +12,7 @@ export interface ModemRuntimeState {
   operator: string | null;
   simReady: boolean;
   phone: string | null;
+  iccid: string | null;
+  lastError: string | null;
   enabled: boolean;
 }

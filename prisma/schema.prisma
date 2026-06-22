@@ -30,6 +30,7 @@ model ModemState {
   signal    Int?
   operator  String?  @db.VarChar(50)
   simReady  Boolean  @default(false) @map("sim_ready")
+  iccid     String?  @db.VarChar(22)
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("modem_states")

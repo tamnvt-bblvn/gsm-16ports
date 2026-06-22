@@ -1,6 +1,6 @@
 # GSM OTP Service (16 cổng)
 
-Service Windows-native quản lý 16 modem GSM qua USB (COM35–COM50), nhận SMS realtime, tách OTP, lưu PostgreSQL và cung cấp REST API + dashboard hiện đại. Có thể gửi SMS, đẩy OTP qua webhook và bảo vệ API bằng API key.
+Service Windows-native quản lý 16 modem GSM qua USB, nhận SMS realtime, tách OTP, lưu PostgreSQL và cung cấp REST API + dashboard hiện đại. Có thể gửi SMS, đẩy OTP qua webhook và bảo vệ API bằng API key.
 
 ## Tính năng
 
@@ -23,7 +23,7 @@ Service Windows-native quản lý 16 modem GSM qua USB (COM35–COM50), nhận S
 - Node.js 20.19+ / 22.12+ / 24+ (khuyến nghị LTS mới nhất)
 - pnpm 10+ (`corepack enable` rồi `corepack prepare pnpm@latest --activate`)
 - PostgreSQL 15+ (native hoặc Docker)
-- Thiết bị GSM 16 cổng với driver USB (COM35–COM50, hoặc chỉnh trong `modems.yaml`)
+- Thiết bị GSM 16 cổng với driver USB (COM port, hoặc chỉnh trong `modems.yaml`)
 
 ## Cài đặt nhanh
 
@@ -50,17 +50,17 @@ copy .env.example .env
 
 Các biến chính (xem đầy đủ trong `.env.example`):
 
-| Biến | Mặc định | Mô tả |
-|------|----------|-------|
-| `DATABASE_URL` | — | Chuỗi kết nối PostgreSQL |
-| `PORT` | `3000` | Cổng HTTP |
-| `LOG_LEVEL` | `info` | `trace`…`fatal` |
-| `API_AUTH_ENABLED` | `false` | Bật API key cho mọi `/api/*` |
-| `API_KEYS` | — | Danh sách key, gửi qua header `x-api-key` |
-| `CORS_ORIGINS` | `*` | Danh sách origin, phẩy ngăn cách |
-| `THROTTLE_TTL` / `THROTTLE_LIMIT` | `60` / `120` | Rate limit (giây / số request) |
-| `OTP_WEBHOOK_URL` | — | URL nhận OTP qua POST |
-| `SWAGGER_ENABLED` | `true` | Bật/tắt `/api/docs` |
+| Biến                              | Mặc định     | Mô tả                                     |
+| --------------------------------- | ------------ | ----------------------------------------- |
+| `DATABASE_URL`                    | —            | Chuỗi kết nối PostgreSQL                  |
+| `PORT`                            | `3000`       | Cổng HTTP                                 |
+| `LOG_LEVEL`                       | `info`       | `trace`…`fatal`                           |
+| `API_AUTH_ENABLED`                | `false`      | Bật API key cho mọi `/api/*`              |
+| `API_KEYS`                        | —            | Danh sách key, gửi qua header `x-api-key` |
+| `CORS_ORIGINS`                    | `*`          | Danh sách origin, phẩy ngăn cách          |
+| `THROTTLE_TTL` / `THROTTLE_LIMIT` | `60` / `120` | Rate limit (giây / số request)            |
+| `OTP_WEBHOOK_URL`                 | —            | URL nhận OTP qua POST                     |
+| `SWAGGER_ENABLED`                 | `true`       | Bật/tắt `/api/docs`                       |
 
 ### 4. Chạy migration
 
@@ -78,30 +78,30 @@ modems:
   portRange:
     from: COM35
     to: COM50
-  reconnectIntervalMs: 5000        # reconnect nhanh khi offline / mất kết nối
-  noSimReconnectIntervalMs: 60000  # reconnect chậm khi không có SIM (no_sim)
-  connectionStaggerMs: 300         # mở từng cổng cách nhau 300ms
-  logThrottleMs: 60000             # giảm log lặp khi reconnect
-  syncSimInboxOnConnect: true      # đọc SMS đã lưu trên SIM khi kết nối
-  smsSendTimeoutMs: 15000          # timeout khi gửi SMS
+  reconnectIntervalMs: 5000 # reconnect nhanh khi offline / mất kết nối
+  noSimReconnectIntervalMs: 60000 # reconnect chậm khi không có SIM (no_sim)
+  connectionStaggerMs: 300 # mở từng cổng cách nhau 300ms
+  logThrottleMs: 60000 # giảm log lặp khi reconnect
+  syncSimInboxOnConnect: true # đọc SMS đã lưu trên SIM khi kết nối
+  smsSendTimeoutMs: 15000 # timeout khi gửi SMS
   entries:
     - port: COM35
       enabled: true
-      phone: ""                    # để trống = auto AT+CNUM / AT+CPBR
+      phone: '' # để trống = auto AT+CNUM / AT+CPBR
     - port: COM40
-      enabled: false               # cổng hỏng / admin tắt — không monitor
-      phone: ""
+      enabled: false # cổng hỏng / admin tắt — không monitor
+      phone: ''
     - port: COM41
       enabled: true
-      phone: "0865100016"          # override số SIM thủ công
+      phone: '0865100016' # override số SIM thủ công
 ```
 
 ### `enabled` vs `no_sim`
 
-| Khái niệm | Ý nghĩa |
-|----------|---------|
-| `enabled: true` | Service **monitor** cổng COM (mặc định cho cả 16 cổng) |
-| `enabled: false` | **Tắt hẳn** monitor — dùng khi cổng hỏng hoặc không dùng; ghi yaml hoặc toggle trên dashboard |
+| Khái niệm           | Ý nghĩa                                                                                                           |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `enabled: true`     | Service **monitor** cổng COM (mặc định cho cả 16 cổng)                                                            |
+| `enabled: false`    | **Tắt hẳn** monitor — dùng khi cổng hỏng hoặc không dùng; ghi yaml hoặc toggle trên dashboard                     |
 | Trạng thái `no_sim` | Cổng **đang bật** nhưng **không có SIM** (`AT+CPIN?` → NOT INSERTED); reconnect mỗi 60s, **không** spam `AT+CMGL` |
 
 **Cắm/rút SIM không cần sửa yaml.** Giữ `enabled: true`; service tự chuyển `no_sim` ↔ `online` trong vòng ~60s.
@@ -135,19 +135,19 @@ pm2 startup
 
 Swagger: `http://localhost:3000/api/docs`
 
-| Method | Endpoint | Mô tả |
-|--------|----------|-------|
-| GET | `/api/health` | Health check (DB + modem) — public |
-| GET | `/api/modems` | Danh sách modem + trạng thái |
-| GET | `/api/modems/summary` | Tổng hợp số modem theo trạng thái (gồm `noSim`) |
-| GET | `/api/modems/:port` | Chi tiết một modem |
-| PATCH | `/api/modems/:port/enabled` | Bật/tắt monitor cổng, ghi `modems.yaml` |
-| PATCH | `/api/modems/:port/phone` | Gán số SIM override, ghi `modems.yaml` |
-| POST | `/api/modems/:port/send-sms` | Gửi SMS qua modem |
-| GET | `/api/otp/latest?phone=098xxx` | OTP mới nhất theo số SIM |
-| GET | `/api/otp/latest?port=COM3` | OTP mới nhất theo COM |
-| GET | `/api/messages?page=1&pageSize=25&search=...&onlyOtp=true` | SMS có phân trang & tìm kiếm |
-| POST | `/api/wait-otp` | Chờ OTP mới (long-poll) |
+| Method | Endpoint                                                   | Mô tả                                           |
+| ------ | ---------------------------------------------------------- | ----------------------------------------------- |
+| GET    | `/api/health`                                              | Health check (DB + modem) — public              |
+| GET    | `/api/modems`                                              | Danh sách modem + trạng thái                    |
+| GET    | `/api/modems/summary`                                      | Tổng hợp số modem theo trạng thái (gồm `noSim`) |
+| GET    | `/api/modems/:port`                                        | Chi tiết một modem                              |
+| PATCH  | `/api/modems/:port/enabled`                                | Bật/tắt monitor cổng, ghi `modems.yaml`         |
+| PATCH  | `/api/modems/:port/phone`                                  | Gán số SIM override, ghi `modems.yaml`          |
+| POST   | `/api/modems/:port/send-sms`                               | Gửi SMS qua modem                               |
+| GET    | `/api/otp/latest?phone=098xxx`                             | OTP mới nhất theo số SIM                        |
+| GET    | `/api/otp/latest?port=COM3`                                | OTP mới nhất theo COM                           |
+| GET    | `/api/messages?page=1&pageSize=25&search=...&onlyOtp=true` | SMS có phân trang & tìm kiếm                    |
+| POST   | `/api/wait-otp`                                            | Chờ OTP mới (long-poll)                         |
 
 ### Bảo mật API key
 

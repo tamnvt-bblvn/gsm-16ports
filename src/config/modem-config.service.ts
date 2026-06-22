@@ -44,7 +44,7 @@ export class ModemConfigService implements OnModuleInit {
     const active = this.getActiveEntries().length;
     const disabled = this.getEntries().length - active;
     this.logger.log(
-      `Loaded modem config from ${configPath} (active=${active}, disabled=${disabled})`,
+      `Loaded modem config from ${configPath} (active=${active}, disabled=${disabled}, autoDiscover=${this.config.autoDiscover})`,
     );
   }
 
@@ -52,7 +52,17 @@ export class ModemConfigService implements OnModuleInit {
     return this.config;
   }
 
+  getAutoDiscoverEnabled(): boolean {
+    return this.config.autoDiscover;
+  }
+
   getEntries(): ModemEntryConfig[] {
+    // When autoDiscover is true, only return explicit entries
+    // (ports are discovered dynamically via SerialPort.list())
+    if (this.config.autoDiscover) {
+      return this.config.entries ?? [];
+    }
+
     if (this.config.entries?.length) {
       return this.config.entries;
     }
@@ -71,12 +81,37 @@ export class ModemConfigService implements OnModuleInit {
   }
 
   isPortEnabled(port: string): boolean {
-    return this.getEntry(port)?.enabled !== false;
+    const entry = this.getEntry(port);
+    // When autoDiscover is on and no entry exists, port is enabled by default
+    if (!entry && this.config.autoDiscover) {
+      return true;
+    }
+    return entry?.enabled !== false;
   }
 
   getPhoneOverride(port: string): string | undefined {
     const phone = this.getEntry(port)?.phone?.trim();
     return phone || undefined;
+  }
+
+  /**
+   * Ensure an entry exists for the given port. Creates one if missing.
+   * Used by auto-discover to persist newly found ports.
+   */
+  ensureEntry(port: string): ModemEntryConfig {
+    const normalizedPort = port.trim().toUpperCase();
+    const entries = this.config.entries ?? [];
+    let entry = entries.find((item) => item.port === normalizedPort);
+
+    if (!entry) {
+      entry = { port: normalizedPort, enabled: true, phone: '' };
+      entries.push(entry);
+      this.config.entries = entries;
+      this.persistConfig();
+      this.logger.log(`Auto-discovered new port: ${normalizedPort}`);
+    }
+
+    return entry;
   }
 
   updateEntryEnabled(port: string, enabled: boolean): void {
@@ -113,6 +148,20 @@ export class ModemConfigService implements OnModuleInit {
 
     this.persistConfig();
     this.logger.log(`Updated phone override for ${normalizedPort}`);
+  }
+
+  /**
+   * Clear phone override for a port (used when SIM changes).
+   * Only clears the phone field, keeps enabled state.
+   */
+  clearPhoneOverride(port: string): void {
+    const normalizedPort = port.trim().toUpperCase();
+    const entry = this.getEntry(normalizedPort);
+    if (entry && entry.phone) {
+      entry.phone = '';
+      this.persistConfig();
+      this.logger.log(`Cleared phone override for ${normalizedPort} (SIM changed)`);
+    }
   }
 
   getConfigFilePath(): string {
@@ -162,3 +211,4 @@ export class ModemConfigService implements OnModuleInit {
     return Number.parseInt(match[1], 10);
   }
 }
+

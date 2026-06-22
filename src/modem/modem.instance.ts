@@ -5,6 +5,7 @@ import { ReadlineParser } from '@serialport/parser-readline';
 import { ModemConfigService } from '../config/modem-config.service';
 import {
   MODEM_STATUS_EVENT,
+  SIM_CHANGED_EVENT,
   SMS_RECEIVED_EVENT,
 } from '../common/events/app.events';
 import { normalizePhone } from '../common/utils/phone.util';
@@ -33,6 +34,7 @@ export class ModemInstance {
   private lastFailureLogAt = 0;
   private closingIntentionally = false;
   private connectingInProgress = false;
+  private currentIccid: string | null = null;
 
   constructor(
     private readonly portName: string,
@@ -50,6 +52,8 @@ export class ModemInstance {
       operator: null,
       simReady: false,
       phone: normalizePhone(modemConfigService.getPhoneOverride(portName)),
+      iccid: null,
+      lastError: null,
       enabled: true,
     };
   }
@@ -128,6 +132,10 @@ export class ModemInstance {
 
       await this.sendCommand('AT+CMGF=1', timeout, true);
       await this.sendCommand('AT+CNMI=2,2,0,0,0', timeout, true);
+
+      // Read ICCID on first connect
+      await this.readAndTrackIccid();
+
       await this.refreshMetadata();
       if (this.state.status === 'no_sim') {
         return;
@@ -135,15 +143,17 @@ export class ModemInstance {
       await this.syncSimInbox();
 
       this.failureCount = 0;
+      this.state.lastError = null;
       this.updateStatus('online');
       this.logger.log(
-        `modem.connected port=${this.portName} phone=${this.state.phone ?? 'unknown'}`,
+        `modem.connected port=${this.portName} phone=${this.state.phone ?? 'unknown'} iccid=${this.state.iccid ?? 'unknown'}`,
       );
       this.scheduleHealthCheck();
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'unknown connection error';
       this.logThrottledFailure('connection_failed', message);
+      this.state.lastError = message;
       this.updateStatus('offline');
       this.scheduleReconnect();
     } finally {
@@ -166,12 +176,42 @@ export class ModemInstance {
     this.state.simReady = false;
     this.state.signal = null;
     this.state.operator = null;
+    this.state.iccid = null;
+    this.currentIccid = null;
     this.updateStatus('no_sim');
     this.logger.debug(`modem.no_sim port=${this.portName}`);
     await this.closePort(true);
     this.scheduleReconnect(
       this.modemConfigService.getConfig().noSimReconnectIntervalMs,
     );
+  }
+
+  private async readIccid(): Promise<string | null> {
+    const timeout = this.modemConfigService.getConfig().atCommandTimeoutMs;
+    // Try AT+CCID first, then AT+ICCID as fallback
+    const commands = ['AT+CCID', 'AT+ICCID'];
+    for (const cmd of commands) {
+      try {
+        const lines = await this.sendCommand(cmd, timeout, true);
+        const iccid = this.atCommandService.parseIccid(lines.join('\n'));
+        if (iccid) {
+          return iccid;
+        }
+      } catch {
+        continue;
+      }
+    }
+    return null;
+  }
+
+  private async readAndTrackIccid(): Promise<void> {
+    const iccid = await this.readIccid();
+    this.currentIccid = iccid;
+    this.state.iccid = iccid;
+
+    if (iccid) {
+      this.logger.debug(`modem.iccid port=${this.portName} iccid=${iccid}`);
+    }
   }
 
   private async detectPhoneNumber(): Promise<string | null> {
@@ -258,11 +298,119 @@ export class ModemInstance {
       return;
     }
 
+    // Network registration check
+    try {
+      const cregLines = await this.sendCommand(
+        'AT+CREG?',
+        this.modemConfigService.getConfig().atCommandTimeoutMs,
+        true,
+      );
+      const reg = this.atCommandService.parseRegistration(cregLines.join('\n'));
+      if (!reg.registered && this.state.lastError === null) {
+        this.state.lastError = 'Mất kết nối mạng, kiểm tra lại sóng';
+      } else if (
+        reg.registered &&
+        this.state.lastError === 'Mất kết nối mạng, kiểm tra lại sóng'
+      ) {
+        this.state.lastError = null;
+      }
+    } catch {
+      // Ignore if CREG fails
+    }
+
+    // SMS Memory check and auto-clear
+    try {
+      const cpmsLines = await this.sendCommand(
+        'AT+CPMS?',
+        this.modemConfigService.getConfig().atCommandTimeoutMs,
+        true,
+      );
+      const capacity = this.atCommandService.parseMemoryCapacity(
+        cpmsLines.join('\n'),
+      );
+
+      if (capacity && capacity.total > 0) {
+        const usageRatio = capacity.used / capacity.total;
+        if (usageRatio >= 0.9) {
+          this.logger.warn(
+            `modem.memory_full port=${this.portName} used=${capacity.used} total=${capacity.total} - auto clearing`,
+          );
+          // Delete all read messages
+          await this.sendCommand('AT+CMGD=1,4');
+          this.state.lastError = 'Bộ nhớ SMS đầy, đã tự động dọn dẹp tin nhắn';
+        }
+      }
+    } catch {
+      // Ignore if CPMS fails
+    }
+
+    // Check for SIM change via ICCID
+    await this.checkSimChange();
+
     if (overridePhone) {
       this.state.phone = normalizePhone(overridePhone);
     } else {
       this.state.phone = await this.detectPhoneNumber();
     }
+
+    this.emitStatus();
+  }
+
+  /**
+   * Detect SIM change by comparing current ICCID with stored value.
+   * When SIM changes: clear phone override, re-detect phone, emit event.
+   */
+  private async checkSimChange(): Promise<void> {
+    const newIccid = await this.readIccid();
+    const oldIccid = this.currentIccid;
+
+    // If we couldn't read ICCID before and still can't, skip
+    if (!oldIccid && !newIccid) {
+      return;
+    }
+
+    // Same SIM, no change
+    if (oldIccid === newIccid) {
+      this.state.iccid = newIccid;
+      return;
+    }
+
+    // SIM changed!
+    const oldPhone = this.state.phone;
+    this.currentIccid = newIccid;
+    this.state.iccid = newIccid;
+
+    this.logger.log(
+      `modem.sim_changed port=${this.portName} old_iccid=${oldIccid ?? 'none'} new_iccid=${newIccid ?? 'none'}`,
+    );
+
+    // Clear existing phone override since SIM changed
+    this.modemConfigService.clearPhoneOverride(this.portName);
+
+    // Try to auto-detect the new phone number
+    const newPhone = await this.detectPhoneNumber();
+    this.state.phone = newPhone;
+
+    // If detected, save it as the new override
+    if (newPhone) {
+      this.modemConfigService.updateEntryPhone(this.portName, newPhone);
+      this.logger.log(
+        `modem.sim_changed_phone_detected port=${this.portName} phone=${newPhone}`,
+      );
+    } else {
+      this.logger.log(
+        `modem.sim_changed_phone_unknown port=${this.portName} — user input required`,
+      );
+    }
+
+    // Emit SIM changed event for dashboard notification
+    this.eventEmitter.emit(SIM_CHANGED_EVENT, {
+      port: this.portName,
+      oldIccid,
+      newIccid,
+      oldPhone,
+      newPhone,
+    });
 
     this.emitStatus();
   }
@@ -362,10 +510,57 @@ export class ModemInstance {
     });
   }
 
-  async sendSms(phone: string, message: string): Promise<number> {
+  /**
+   * Pre-flight check before sending SMS.
+   * Validates modem is truly ready to send (not just "online" status).
+   */
+  private async preFlightSmsCheck(phone: string): Promise<void> {
     if (this.state.status !== 'online') {
-      throw new Error(`Modem ${this.portName} chưa online, không thể gửi SMS`);
+      throw new Error(
+        `Modem ${this.portName} chưa online (trạng thái: ${this.state.status}), không thể gửi SMS`,
+      );
     }
+
+    if (!this.state.simReady) {
+      throw new Error(
+        `SIM trên ${this.portName} chưa sẵn sàng. Kiểm tra SIM đã cắm đúng.`,
+      );
+    }
+
+    // Check network registration
+    const timeout = this.modemConfigService.getConfig().atCommandTimeoutMs;
+    try {
+      const cregLines = await this.sendCommand('AT+CREG?', timeout, true);
+      const reg = this.atCommandService.parseRegistration(cregLines.join('\n'));
+      if (!reg.registered) {
+        throw new Error(
+          `Modem ${this.portName} chưa đăng ký mạng. Không thể gửi SMS đến ${phone}. Kiểm tra sóng mạng.`,
+        );
+      }
+    } catch (error) {
+      // If CREG check itself fails, log but don't block (some modems don't support it)
+      if (
+        error instanceof Error &&
+        error.message.includes('chưa đăng ký mạng')
+      ) {
+        throw error;
+      }
+      this.logger.debug(
+        `modem.creg_check_failed port=${this.portName} (non-blocking)`,
+      );
+    }
+
+    // Check signal strength
+    if (this.state.signal !== null && this.state.signal < 2) {
+      throw new Error(
+        `Tín hiệu quá yếu trên ${this.portName} (signal=${this.state.signal}). Di chuyển thiết bị đến nơi có sóng tốt hơn.`,
+      );
+    }
+  }
+
+  async sendSms(phone: string, message: string): Promise<number> {
+    // Run pre-flight checks before attempting to send
+    await this.preFlightSmsCheck(phone);
 
     return new Promise<number>((resolve, reject) => {
       this.commandChain = this.commandChain
@@ -393,7 +588,11 @@ export class ModemInstance {
               const captured = this.activeCommand?.lines ?? [];
               this.activeCommand = null;
               cmdReject(
-                this.createSmsTimeoutError(phone, captured, config.smsSendTimeoutMs),
+                this.createSmsTimeoutError(
+                  phone,
+                  captured,
+                  config.smsSendTimeoutMs,
+                ),
               );
             }, config.smsSendTimeoutMs);
 
@@ -420,13 +619,16 @@ export class ModemInstance {
           return reference;
         })
         .then((reference) => {
+          this.state.lastError = null;
           this.logger.log(`sms.sent port=${this.portName} to=${phone}`);
           resolve(reference);
         })
         .catch((error: Error) => {
+          this.state.lastError = error.message;
           this.logger.warn(
             `sms.send_failed port=${this.portName} to=${phone} reason=${error.message}`,
           );
+          this.emitStatus();
           reject(error);
         });
     });
@@ -466,7 +668,10 @@ export class ModemInstance {
     );
   }
 
-  private awaitPromptCharacter(timeoutMs: number, phone: string): Promise<void> {
+  private awaitPromptCharacter(
+    timeoutMs: number,
+    phone: string,
+  ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const port = this.port;
       if (!port) {
@@ -532,6 +737,7 @@ export class ModemInstance {
     }
 
     this.logThrottledFailure('disconnected', reason);
+    this.state.lastError = reason;
     this.updateStatus('offline');
     await this.closePort(true);
     this.scheduleReconnect();
@@ -619,6 +825,8 @@ export class ModemInstance {
       operator: this.state.operator,
       simReady: this.state.simReady,
       phone: this.state.phone,
+      iccid: this.state.iccid,
+      lastError: this.state.lastError,
       enabled: this.modemConfigService.isPortEnabled(this.portName),
     });
   }

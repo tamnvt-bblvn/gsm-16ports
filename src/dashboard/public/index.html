@@ -24,15 +24,47 @@
         <div class="header-brand">
           <div class="logo" aria-hidden="true">
             <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-              <rect x="2" y="2" width="10" height="10" rx="2" fill="currentColor" opacity="0.9"/>
-              <rect x="16" y="2" width="10" height="10" rx="2" fill="currentColor" opacity="0.5"/>
-              <rect x="2" y="16" width="10" height="10" rx="2" fill="currentColor" opacity="0.5"/>
-              <rect x="16" y="16" width="10" height="10" rx="2" fill="currentColor" opacity="0.9"/>
+              <rect
+                x="2"
+                y="2"
+                width="10"
+                height="10"
+                rx="2"
+                fill="currentColor"
+                opacity="0.9"
+              />
+              <rect
+                x="16"
+                y="2"
+                width="10"
+                height="10"
+                rx="2"
+                fill="currentColor"
+                opacity="0.5"
+              />
+              <rect
+                x="2"
+                y="16"
+                width="10"
+                height="10"
+                rx="2"
+                fill="currentColor"
+                opacity="0.5"
+              />
+              <rect
+                x="16"
+                y="16"
+                width="10"
+                height="10"
+                rx="2"
+                fill="currentColor"
+                opacity="0.9"
+              />
             </svg>
           </div>
           <div>
             <h1 class="header-title">GSM OTP</h1>
-            <p class="header-sub">16-port monitor · COM35–COM50</p>
+            <p class="header-sub">16-port monitor · COMxxxx</p>
           </div>
         </div>
 
@@ -44,17 +76,23 @@
           <div class="telemetry-divider" aria-hidden="true"></div>
           <div class="telemetry-item">
             <span class="telemetry-label">Connecting</span>
-            <span class="telemetry-value telemetry-warn" id="stat-connecting">—</span>
+            <span class="telemetry-value telemetry-warn" id="stat-connecting"
+              >—</span
+            >
           </div>
           <div class="telemetry-divider" aria-hidden="true"></div>
           <div class="telemetry-item">
             <span class="telemetry-label">No SIM</span>
-            <span class="telemetry-value telemetry-muted" id="stat-no-sim">—</span>
+            <span class="telemetry-value telemetry-muted" id="stat-no-sim"
+              >—</span
+            >
           </div>
           <div class="telemetry-divider" aria-hidden="true"></div>
           <div class="telemetry-item">
             <span class="telemetry-label">Disabled</span>
-            <span class="telemetry-value telemetry-muted" id="stat-disabled">—</span>
+            <span class="telemetry-value telemetry-muted" id="stat-disabled"
+              >—</span
+            >
           </div>
           <div class="telemetry-divider" aria-hidden="true"></div>
           <div class="telemetry-item">
@@ -80,12 +118,25 @@
             aria-label="Đổi giao diện sáng/tối"
             title="Sáng / Tối"
           >
-            <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <circle cx="12" cy="12" r="4"/>
-              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+            <svg
+              class="icon"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="4" />
+              <path
+                d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"
+              />
             </svg>
           </button>
-          <a class="btn-ghost" href="/api/docs" target="_blank" rel="noreferrer">API</a>
+          <a class="btn-ghost" href="/api/docs" target="_blank" rel="noreferrer"
+            >API</a
+          >
         </div>
       </header>
 
@@ -94,7 +145,9 @@
           <div class="section-head">
             <div>
               <h2 id="modems-heading">Modem fleet</h2>
-              <p class="section-desc">Bấm một hàng để xem chi tiết và gửi SMS</p>
+              <p class="section-desc">
+                Bấm một hàng để xem chi tiết và gửi SMS
+              </p>
             </div>
             <span class="section-meta mono" id="modem-count">0 modem</span>
           </div>
@@ -131,8 +184,15 @@
               <span class="phone-setup-summary-inner">
                 <span class="phone-setup-lead">
                   <span class="phone-setup-chevron-box" aria-hidden="true">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                      <path d="M6 9l6 6 6-6"/>
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                    >
+                      <path d="M6 9l6 6 6-6" />
                     </svg>
                   </span>
                   <span class="phone-setup-heading">
@@ -143,7 +203,9 @@
                   </span>
                 </span>
                 <span class="phone-setup-meta">
-                  <span class="phone-setup-count mono" id="phone-setup-count">0 cổng</span>
+                  <span class="phone-setup-count mono" id="phone-setup-count"
+                    >0 cổng</span
+                  >
                   <span class="phone-setup-state mono" aria-hidden="true">
                     <span class="phone-setup-state-open">Thu</span>
                     <span class="phone-setup-state-closed">Mở</span>
@@ -255,7 +317,11 @@
           <p class="drawer-kicker mono" id="drawer-kicker">MODEM DETAIL</p>
           <div class="drawer-title-row">
             <h2 class="drawer-title" id="drawer-title">COM—</h2>
-            <span class="drawer-status-badge status-offline" id="drawer-status-badge">offline</span>
+            <span
+              class="drawer-status-badge status-offline"
+              id="drawer-status-badge"
+              >offline</span
+            >
           </div>
         </div>
         <button
@@ -264,13 +330,26 @@
           id="drawer-close"
           aria-label="Đóng"
         >
-          <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path d="M18 6L6 18M6 6l12 12"/>
+          <svg
+            class="icon"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
+            <path d="M18 6L6 18M6 6l12 12" />
           </svg>
         </button>
       </div>
 
-      <div class="drawer-metrics" id="drawer-metrics" aria-label="Chỉ số modem"></div>
+      <div
+        class="drawer-metrics"
+        id="drawer-metrics"
+        aria-label="Chỉ số modem"
+      ></div>
 
       <div class="drawer-stack">
         <section class="drawer-panel" id="drawer-port-control">
@@ -290,7 +369,9 @@
                 checked
               />
               <span class="cockpit-switch-track" aria-hidden="true"></span>
-              <span class="cockpit-switch-label" id="drawer-enabled-label">Bật</span>
+              <span class="cockpit-switch-label" id="drawer-enabled-label"
+                >Bật</span
+              >
             </label>
           </header>
         </section>
@@ -303,7 +384,9 @@
                 Dùng khi modem không tự đọc được số (Phone = "-").
               </p>
             </div>
-            <span class="drawer-panel-tag mono" id="drawer-phone-tag">Chưa có</span>
+            <span class="drawer-panel-tag mono" id="drawer-phone-tag"
+              >Chưa có</span
+            >
           </header>
           <div class="drawer-panel-body">
             <label class="label" for="drawer-phone-input">Số điện thoại</label>
@@ -315,7 +398,11 @@
               inputmode="numeric"
               autocomplete="off"
             />
-            <button type="button" class="btn btn-accent btn-full" id="drawer-phone-save">
+            <button
+              type="button"
+              class="btn btn-accent btn-full"
+              id="drawer-phone-save"
+            >
               Lưu số SIM
             </button>
           </div>
@@ -327,7 +414,9 @@
               <h3 class="drawer-panel-title">Gửi SMS</h3>
               <p class="drawer-panel-desc">Chỉ gửi khi modem đang online.</p>
             </div>
-            <span class="drawer-panel-tag mono" id="send-status-tag">Sẵn sàng</span>
+            <span class="drawer-panel-tag mono" id="send-status-tag"
+              >Sẵn sàng</span
+            >
           </header>
           <form class="drawer-panel-body" id="send-sms-form">
             <label class="label" for="send-phone">Số nhận</label>
@@ -348,10 +437,19 @@
               placeholder="Nội dung tin nhắn…"
               required
             ></textarea>
-            <button type="submit" class="btn btn-accent btn-full" id="send-submit">
+            <button
+              type="submit"
+              class="btn btn-accent btn-full"
+              id="send-submit"
+            >
               Gửi SMS
             </button>
-            <p class="drawer-alert hidden" id="send-hint" role="status" aria-live="polite"></p>
+            <p
+              class="drawer-alert hidden"
+              id="send-hint"
+              role="status"
+              aria-live="polite"
+            ></p>
           </form>
         </section>
       </div>
@@ -366,12 +464,23 @@
         aria-describedby="enabled-confirm-desc"
       >
         <div class="modal-icon" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 9v4M12 17h.01"/>
-            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M12 9v4M12 17h.01" />
+            <path
+              d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
+            />
           </svg>
         </div>
-        <h3 class="modal-title" id="enabled-confirm-title">Xác nhận điều khiển cổng</h3>
+        <h3 class="modal-title" id="enabled-confirm-title">
+          Xác nhận điều khiển cổng
+        </h3>
         <p class="modal-body" id="enabled-confirm-desc">
           Thay đổi trạng thái monitor cho cổng
           <strong class="mono" id="enabled-confirm-port">COM—</strong>.
@@ -380,7 +489,9 @@
           Thay đổi ghi vào <code>config/modems.yaml</code> và áp dụng ngay.
         </p>
         <div class="modal-actions">
-          <button type="button" class="btn" id="enabled-confirm-cancel">Hủy</button>
+          <button type="button" class="btn" id="enabled-confirm-cancel">
+            Hủy
+          </button>
           <button type="button" class="btn btn-accent" id="enabled-confirm-ok">
             Xác nhận
           </button>
@@ -397,12 +508,23 @@
         aria-describedby="phone-confirm-desc"
       >
         <div class="modal-icon" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 9v4M12 17h.01"/>
-            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M12 9v4M12 17h.01" />
+            <path
+              d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
+            />
           </svg>
         </div>
-        <h3 class="modal-title" id="phone-confirm-title">Xác nhận lưu số SIM</h3>
+        <h3 class="modal-title" id="phone-confirm-title">
+          Xác nhận lưu số SIM
+        </h3>
         <p class="modal-body" id="phone-confirm-desc">
           Bạn sắp gán số
           <strong class="mono" id="confirm-phone">—</strong>
