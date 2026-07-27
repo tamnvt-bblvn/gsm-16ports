@@ -55,7 +55,7 @@ Các biến chính (xem đầy đủ trong `.env.example`):
 | `DATABASE_URL`                    | —            | Chuỗi kết nối PostgreSQL                  |
 | `PORT`                            | `3000`       | Cổng HTTP                                 |
 | `LOG_LEVEL`                       | `info`       | `trace`…`fatal`                           |
-| `API_AUTH_ENABLED`                | `false`      | Bật API key cho mọi `/api/*`              |
+| `API_AUTH_ENABLED`                | `false`      | Bật API key (trừ dashboard, health, messages/modems UI) |
 | `API_KEYS`                        | —            | Danh sách key, gửi qua header `x-api-key` |
 | `CORS_ORIGINS`                    | `*`          | Danh sách origin, phẩy ngăn cách          |
 | `THROTTLE_TTL` / `THROTTLE_LIMIT` | `60` / `120` | Rate limit (giây / số request)            |
@@ -70,14 +70,18 @@ pnpm exec prisma migrate deploy
 
 ### 5. Cấu hình COM port
 
-Chỉnh [`config/modems.yaml`](config/modems.yaml):
+Với `autoDiscover: true` (mặc định khuyến nghị), service **tự quét** các cổng COM đang có trên Windows trong `portRange`, mở monitor, và chỉ hiện những cổng đó trên dashboard. Không cần khai báo từng COM trong `entries`.
+
+`entries` chỉ dùng để:
+- nhớ **phone override** / `enabled: false` khi cổng được cắm lại
+- hoặc tắt hẳn một cổng cụ thể
 
 ```yaml
 modems:
   autoDiscover: true
   portRange:
-    from: COM35
-    to: COM50
+    from: COM3
+    to: COM18 # giới hạn dải quét (tránh COM Bluetooth / cổng lạ)
   reconnectIntervalMs: 5000 # reconnect nhanh khi offline / mất kết nối
   noSimReconnectIntervalMs: 60000 # reconnect chậm khi không có SIM (no_sim)
   connectionStaggerMs: 300 # mở từng cổng cách nhau 300ms
@@ -85,17 +89,16 @@ modems:
   syncSimInboxOnConnect: true # đọc SMS đã lưu trên SIM khi kết nối
   smsSendTimeoutMs: 15000 # timeout khi gửi SMS
   entries:
-    - port: COM35
-      enabled: true
-      phone: '' # để trống = auto AT+CNUM / AT+CPBR
-    - port: COM40
+    # Có thể để [] — cổng sẽ tự xuất hiện khi USB gắn vào
+    - port: COM10
       enabled: false # cổng hỏng / admin tắt — không monitor
       phone: ''
-    - port: COM41
+    - port: COM11
       enabled: true
       phone: '0865100016' # override số SIM thủ công
 ```
 
+Khi `autoDiscover: false`, service chỉ monitor đúng các cổng liệt kê trong `entries` (hoặc expand từ `portRange` nếu `entries` trống).
 ### `enabled` vs `no_sim`
 
 | Khái niệm           | Ý nghĩa                                                                                                           |
@@ -151,7 +154,7 @@ Swagger: `http://localhost:3000/api/docs`
 
 ### Bảo mật API key
 
-Khi `API_AUTH_ENABLED=true`, mọi `/api/*` (trừ dashboard và `/api/health`) yêu cầu header:
+Khi `API_AUTH_ENABLED=true`, các API automation (ví dụ `/api/otp/*`, `/api/wait-otp`) yêu cầu header. Dashboard tĩnh cùng `/api/modems`, `/api/messages`, `/api/health` vẫn public:
 
 ```
 x-api-key: <key trong API_KEYS>

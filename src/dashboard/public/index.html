@@ -14,7 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/dashboard.css?v=20260609" />
+    <link rel="stylesheet" href="/dashboard.css?v=20260727c" />
   </head>
   <body>
     <a class="skip-link" href="#main-content">Chuyển tới nội dung</a>
@@ -64,7 +64,7 @@
           </div>
           <div>
             <h1 class="header-title">GSM OTP</h1>
-            <p class="header-sub">16-port monitor · COMxxxx</p>
+            <p class="header-sub">Giám sát 16 cổng COM</p>
           </div>
         </div>
 
@@ -75,28 +75,28 @@
           </div>
           <div class="telemetry-divider" aria-hidden="true"></div>
           <div class="telemetry-item">
-            <span class="telemetry-label">Connecting</span>
+            <span class="telemetry-label">Đang kết nối</span>
             <span class="telemetry-value telemetry-warn" id="stat-connecting"
               >—</span
             >
           </div>
           <div class="telemetry-divider" aria-hidden="true"></div>
           <div class="telemetry-item">
-            <span class="telemetry-label">No SIM</span>
+            <span class="telemetry-label">Chưa SIM</span>
             <span class="telemetry-value telemetry-muted" id="stat-no-sim"
               >—</span
             >
           </div>
           <div class="telemetry-divider" aria-hidden="true"></div>
           <div class="telemetry-item">
-            <span class="telemetry-label">Disabled</span>
+            <span class="telemetry-label">Tắt</span>
             <span class="telemetry-value telemetry-muted" id="stat-disabled"
               >—</span
             >
           </div>
           <div class="telemetry-divider" aria-hidden="true"></div>
           <div class="telemetry-item">
-            <span class="telemetry-label">SIM ready</span>
+            <span class="telemetry-label">SIM sẵn sàng</span>
             <span class="telemetry-value" id="stat-sim-ready">—</span>
           </div>
         </div>
@@ -144,7 +144,7 @@
         <section class="section" aria-labelledby="modems-heading">
           <div class="section-head">
             <div>
-              <h2 id="modems-heading">Modem fleet</h2>
+              <h2 id="modems-heading">Danh sách modem</h2>
               <p class="section-desc">
                 Bấm một hàng để xem chi tiết và gửi SMS
               </p>
@@ -156,11 +156,11 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <th scope="col">Port</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Signal</th>
-                  <th scope="col">Operator</th>
-                  <th scope="col">Phone</th>
+                  <th scope="col">Cổng</th>
+                  <th scope="col">Trạng thái</th>
+                  <th scope="col">Tín hiệu</th>
+                  <th scope="col">Nhà mạng</th>
+                  <th scope="col">Số điện thoại</th>
                   <th scope="col">SIM</th>
                 </tr>
               </thead>
@@ -227,7 +227,7 @@
           <section class="section section-grow" aria-labelledby="sms-heading">
             <div class="section-head">
               <div>
-                <h2 id="sms-heading">SMS inbox</h2>
+                <h2 id="sms-heading">Hộp thư SMS</h2>
                 <p class="section-desc" id="sms-mode-label">
                   Realtime từ tất cả cổng
                 </p>
@@ -257,7 +257,7 @@
               </label>
               <div class="toolbar-actions">
                 <button type="submit" class="btn btn-accent">Tìm</button>
-                <button type="button" id="sms-clear" class="btn">Live</button>
+                <button type="button" id="sms-clear" class="btn">Trực tiếp</button>
               </div>
             </form>
 
@@ -314,7 +314,7 @@
     >
       <div class="drawer-top">
         <div class="drawer-top-main">
-          <p class="drawer-kicker mono" id="drawer-kicker">MODEM DETAIL</p>
+          <p class="drawer-kicker mono" id="drawer-kicker">CHI TIẾT MODEM</p>
           <div class="drawer-title-row">
             <h2 class="drawer-title" id="drawer-title">COM—</h2>
             <span
@@ -547,6 +547,7 @@
     <div class="toasts" id="toast-stack" aria-live="assertive"></div>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="/dashboard.js?v=20260609"></script>
+    <script src="/dashboard-helpers.js?v=20260727c"></script>
+    <script src="/dashboard.js?v=20260727c"></script>
   </body>
 </html>

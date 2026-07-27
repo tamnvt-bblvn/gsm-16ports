@@ -64,6 +64,35 @@ const confirmPort = document.getElementById('confirm-port');
 const confirmCancel = document.getElementById('confirm-cancel');
 const confirmOk = document.getElementById('confirm-ok');
 
+const helpers = window.DashboardHelpers || {};
+const normalizePhoneInput =
+  helpers.normalizePhoneInput ||
+  function normalizePhoneInputFallback(value) {
+    let digits = String(value ?? '').replace(/[\s\-().+]/g, '');
+    if (digits.startsWith('84') && digits.length >= 11) {
+      digits = `0${digits.slice(2)}`;
+    }
+    if (!digits.startsWith('0') && /^\d{9,10}$/.test(digits)) {
+      digits = `0${digits}`;
+    }
+    return digits;
+  };
+const isValidPhone =
+  helpers.isValidPhone ||
+  function isValidPhoneFallback(value) {
+    return /^0\d{9,10}$/.test(value);
+  };
+const pickSmsOtpCode =
+  helpers.pickSmsOtpCode ||
+  function pickSmsOtpCodeFallback(sms) {
+    return sms?.otpCode ?? sms?.otp ?? null;
+  };
+const shouldPrependLiveSms =
+  helpers.shouldPrependLiveSms ||
+  function shouldPrependLiveSmsFallback(mode) {
+    return mode === 'live';
+  };
+
 const modems = new Map();
 const phoneDraftByPort = new Map();
 let pendingPhoneSave = null;
@@ -74,13 +103,16 @@ let smsMode = 'live';
 let searchPage = 1;
 let searchTotalPages = 1;
 let activeDrawerPort = null;
+let enabledSaveInFlight = false;
+let phoneSaveInFlight = false;
+let sendSmsInFlight = false;
 
 const STATUS_LABEL = {
-  online: 'online',
-  offline: 'offline',
-  connecting: 'connecting',
+  online: 'Online',
+  offline: 'Offline',
+  connecting: 'Đang kết nối',
   no_sim: 'Chưa SIM',
-  disabled: 'disabled',
+  disabled: 'Tắt',
 };
 
 function on(element, event, handler) {
@@ -176,21 +208,6 @@ function isMissingPhone(modem) {
     modem.status !== 'no_sim' &&
     !modem.phone
   );
-}
-
-function normalizePhoneInput(value) {
-  let digits = String(value ?? '').replace(/[\s\-().+]/g, '');
-  if (digits.startsWith('84') && digits.length >= 11) {
-    digits = `0${digits.slice(2)}`;
-  }
-  if (!digits.startsWith('0') && /^\d{9,10}$/.test(digits)) {
-    digits = `0${digits}`;
-  }
-  return digits;
-}
-
-function isValidPhone(value) {
-  return /^0\d{9,10}$/.test(value);
 }
 
 function openPhoneConfirm(port, phone) {
@@ -906,8 +923,9 @@ on(enabledConfirmOverlay, 'click', (event) => {
 });
 
 on(enabledConfirmOk, 'click', async () => {
-  if (!pendingEnabledSave) return;
+  if (!pendingEnabledSave || enabledSaveInFlight) return;
   const { port, enabled } = pendingEnabledSave;
+  enabledSaveInFlight = true;
   enabledConfirmOk.disabled = true;
   try {
     const payload = await savePortEnabled(port, enabled);
@@ -918,6 +936,7 @@ on(enabledConfirmOk, 'click', async () => {
   } catch (error) {
     showToast(error.message ?? 'Cập nhật thất bại', 'error');
   } finally {
+    enabledSaveInFlight = false;
     enabledConfirmOk.disabled = false;
   }
 });
@@ -931,8 +950,9 @@ on(phoneConfirmOverlay, 'click', (event) => {
 });
 
 on(confirmOk, 'click', async () => {
-  if (!pendingPhoneSave) return;
+  if (!pendingPhoneSave || phoneSaveInFlight) return;
   const { port, phone } = pendingPhoneSave;
+  phoneSaveInFlight = true;
   confirmOk.disabled = true;
   try {
     await savePhoneOverride(port, phone);
@@ -943,6 +963,7 @@ on(confirmOk, 'click', async () => {
   } catch (error) {
     showToast(error.message ?? 'Lưu thất bại', 'error');
   } finally {
+    phoneSaveInFlight = false;
     confirmOk.disabled = false;
   }
 });
@@ -966,12 +987,13 @@ on(drawerOverlay, 'click', closeDrawer);
 
 on(sendForm, 'submit', async (event) => {
   event.preventDefault();
-  if (!activeDrawerPort) return;
+  if (!activeDrawerPort || sendSmsInFlight) return;
 
   const phone = sendPhone.value.trim();
   const message = sendMessage.value.trim();
   if (!phone || !message) return;
 
+  sendSmsInFlight = true;
   sendSubmit.disabled = true;
   sendHint.className = 'drawer-alert is-info';
   sendHint.classList.remove('hidden');
@@ -988,10 +1010,12 @@ on(sendForm, 'submit', async (event) => {
     );
     const payload = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const message = Array.isArray(payload.message)
+      const errMessage = Array.isArray(payload.message)
         ? payload.message.join(', ')
         : payload.message ?? 'Gửi SMS thất bại';
-      throw new Error(message);
+      const err = new Error(errMessage);
+      err.suggestion = payload.details?.suggestion ?? '';
+      throw err;
     }
     sendHint.className = 'drawer-alert is-success';
     sendHint.classList.remove('hidden');
@@ -999,26 +1023,14 @@ on(sendForm, 'submit', async (event) => {
     sendMessage.value = '';
     showToast(`SMS đã gửi qua ${activeDrawerPort}`, 'success');
   } catch (error) {
-    let text = '';
-    let suggestion = '';
-    if (error.message) {
-      try {
-        const parsed = JSON.parse(error.message);
-        text = parsed.message ?? error.message;
-        suggestion = parsed.details?.suggestion ?? '';
-      } catch {
-        text = Array.isArray(error.message)
-          ? error.message.join(', ')
-          : error.message;
-      }
-    } else {
-      text = 'Gửi SMS thất bại';
-    }
+    const text = error.message || 'Gửi SMS thất bại';
+    const suggestion = error.suggestion || '';
     sendHint.className = 'drawer-alert is-error';
     sendHint.classList.remove('hidden');
-    sendHint.innerHTML = `<strong>${escapeHtml(text)}</strong>${suggestion ? `<br><small class="error-suggestion">💡 ${escapeHtml(suggestion)}</small>` : ''}`;
+    sendHint.innerHTML = `<strong>${escapeHtml(text)}</strong>${suggestion ? `<br><small class="error-suggestion">${escapeHtml(suggestion)}</small>` : ''}`;
     showToast(text, 'error', 6000);
   } finally {
+    sendSmsInFlight = false;
     sendSubmit.disabled = false;
   }
 });
@@ -1040,8 +1052,20 @@ function connectSocket() {
     renderModems();
   });
 
+  socket.on('modem.removed', (payload) => {
+    const port = payload?.port;
+    if (!port) return;
+    modems.delete(port);
+    if (activeDrawerPort === port) {
+      closeDrawer();
+    }
+    lastMissingPhonePortsKey = '';
+    renderModems();
+    showToast(`Cổng ${port} đã ngắt`, 'info', 4000);
+  });
+
   socket.on('sms.received', (sms) => {
-    if (smsMode !== 'live') return;
+    if (!shouldPrependLiveSms(smsMode)) return;
     prependFeedItem(
       smsFeed,
       smsEmpty,
@@ -1050,7 +1074,7 @@ function connectSocket() {
         sms.message,
         formatDate(sms.receivedAt),
         sms.sender,
-        null,
+        pickSmsOtpCode(sms),
       ),
     );
   });
@@ -1067,16 +1091,23 @@ function connectSocket() {
   socket.on('sim.changed', (data) => {
     const phoneInfo = data.newPhone
       ? `Số mới: ${data.newPhone}`
-      : 'Chưa detect được số — cần nhập thủ công';
-    showToast(`🔄 SIM thay đổi tại ${data.port}. ${phoneInfo}`, data.newPhone ? 'info' : 'error', 8000);
-    // Refresh modem list to update UI
+      : 'Chưa detect được số - cần nhập thủ công';
+    showToast(
+      `SIM thay đổi tại ${data.port}. ${phoneInfo}`,
+      data.newPhone ? 'info' : 'error',
+      8000,
+    );
     loadModems().catch(() => {});
   });
 
   setInterval(async () => {
     if (socket.connected) return;
     try {
-      await loadModems();
+      const tasks = [loadModems()];
+      if (shouldPrependLiveSms(smsMode)) {
+        tasks.push(loadLiveMessages());
+      }
+      await Promise.all(tasks);
       setConnectionState('is-fallback', 'Polling fallback đang hoạt động');
     } catch {
       setConnectionState('is-error', 'Không thể kết nối API');

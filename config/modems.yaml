@@ -7,58 +7,58 @@ modems:
   noSimReconnectIntervalMs: 60000
   autoDiscover: true
   portRange:
-    from: COM1
-    to: COM50
+    from: COM3
+    to: COM18
   baudRate: 115200
   reconnectIntervalMs: 5000
   healthCheckIntervalMs: 30000
   atCommandTimeoutMs: 5000
   entries:
-    - port: COM5
-      enabled: true
-      phone: ""
-    - port: COM17
-      enabled: true
-      phone: ""
-    - port: COM9
-      enabled: true
-      phone: ""
-    - port: COM12
-      enabled: true
-      phone: ""
-    - port: COM15
-      enabled: true
-      phone: ""
-    - port: COM14
-      enabled: true
-      phone: ""
-    - port: COM6
-      enabled: true
-      phone: ""
-    - port: COM8
-      enabled: true
-      phone: ""
-    - port: COM7
-      enabled: true
-      phone: ""
-    - port: COM13
-      enabled: true
-      phone: ""
-    - port: COM10
-      enabled: true
-      phone: ""
-    - port: COM18
-      enabled: true
-      phone: ""
-    - port: COM11
-      enabled: true
-      phone: ""
     - port: COM3
       enabled: true
       phone: ""
     - port: COM4
       enabled: true
       phone: ""
+    - port: COM5
+      enabled: true
+      phone: ""
+    - port: COM6
+      enabled: true
+      phone: ""
+    - port: COM7
+      enabled: true
+      phone: ""
+    - port: COM8
+      enabled: true
+      phone: ""
+    - port: COM9
+      enabled: true
+      phone: ""
+    - port: COM10
+      enabled: true
+      phone: ""
+    - port: COM11
+      enabled: true
+      phone: ""
+    - port: COM12
+      enabled: true
+      phone: ""
+    - port: COM13
+      enabled: true
+      phone: ""
+    - port: COM14
+      enabled: true
+      phone: ""
+    - port: COM15
+      enabled: true
+      phone: ""
     - port: COM16
+      enabled: true
+      phone: ""
+    - port: COM17
+      enabled: true
+      phone: ""
+    - port: COM18
       enabled: true
       phone: ""

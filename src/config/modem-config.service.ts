@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
+import { isComPortInRange, normalizeComPort } from '../common/utils/com-port.util';
 import {
   ModemConfig,
   ModemEntryConfig,
@@ -77,7 +78,8 @@ export class ModemConfigService implements OnModuleInit {
   }
 
   getEntry(port: string): ModemEntryConfig | undefined {
-    return this.getEntries().find((entry) => entry.port === port);
+    const normalizedPort = normalizeComPort(port);
+    return this.getEntries().find((entry) => entry.port === normalizedPort);
   }
 
   isPortEnabled(port: string): boolean {
@@ -87,6 +89,15 @@ export class ModemConfigService implements OnModuleInit {
       return true;
     }
     return entry?.enabled !== false;
+  }
+
+  /** True when port is inside configured portRange (inclusive). */
+  isWithinPortRange(port: string): boolean {
+    return isComPortInRange(
+      port,
+      this.config.portRange.from,
+      this.config.portRange.to,
+    );
   }
 
   getPhoneOverride(port: string): string | undefined {

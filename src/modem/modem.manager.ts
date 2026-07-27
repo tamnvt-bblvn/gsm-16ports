@@ -8,8 +8,13 @@ import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { SerialPort } from 'serialport';
 import { ModemConfigService } from '../config/modem-config.service';
-import { MODEM_STATUS_EVENT } from '../common/events/app.events';
+import {
+  MODEM_REMOVED_EVENT,
+  MODEM_STATUS_EVENT,
+} from '../common/events/app.events';
 import type { ModemStatusPayload } from '../common/events/app.events';
+import { normalizeComPort } from '../common/utils/com-port.util';
+import { RunQueue } from '../common/utils/run-queue.util';
 import { normalizePhone } from '../common/utils/phone.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { AtCommandService } from './at-command.service';
@@ -23,6 +28,7 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
   private instances = new Map<string, ModemInstance>();
   private discoveryTimer: NodeJS.Timeout | null = null;
   private knownSystemPorts = new Set<string>();
+  private readonly discoveryQueue = new RunQueue();
 
   constructor(
     private readonly modemConfigService: ModemConfigService,
@@ -36,7 +42,7 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    await this.discoverAndSync();
+    await this.scheduleDiscoverAndSync();
     this.startDiscoveryLoop();
   }
 
@@ -53,17 +59,26 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
   }
 
   getAllStates(): ModemRuntimeState[] {
-    // Combine configured entries + any discovered ports with running instances
     const portSet = new Set<string>();
 
-    // Add all configured entries
-    for (const entry of this.modemConfigService.getEntries()) {
-      portSet.add(entry.port);
-    }
-
-    // Add all currently running instances (auto-discovered)
-    for (const port of this.instances.keys()) {
-      portSet.add(port);
+    if (this.modemConfigService.getAutoDiscoverEnabled()) {
+      // Auto-detect: only show COM ports currently present on the system.
+      // YAML entries may still hold phone overrides for when a port returns.
+      for (const port of this.knownSystemPorts) {
+        if (this.modemConfigService.isWithinPortRange(port)) {
+          portSet.add(normalizeComPort(port));
+        }
+      }
+      for (const port of this.instances.keys()) {
+        portSet.add(normalizeComPort(port));
+      }
+    } else {
+      for (const entry of this.modemConfigService.getEntries()) {
+        portSet.add(entry.port);
+      }
+      for (const port of this.instances.keys()) {
+        portSet.add(port);
+      }
     }
 
     return [...portSet]
@@ -74,13 +89,14 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
   }
 
   getState(port: string): ModemRuntimeState | null {
-    const hasEntry = !!this.modemConfigService.getEntry(port);
-    const hasInstance = this.instances.has(port);
+    const normalizedPort = normalizeComPort(port);
+    const hasEntry = !!this.modemConfigService.getEntry(normalizedPort);
+    const hasInstance = this.instances.has(normalizedPort);
 
     if (!hasEntry && !hasInstance) {
       return null;
     }
-    return this.buildStateForPort(port);
+    return this.buildStateForPort(normalizedPort);
   }
 
   getFleetSummary(): {
@@ -106,7 +122,7 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
     port: string,
     enabled: boolean,
   ): Promise<ModemRuntimeState> {
-    const normalizedPort = port.trim().toUpperCase();
+    const normalizedPort = normalizeComPort(port);
 
     // Ensure entry exists (auto-discover may not have created one yet)
     this.modemConfigService.ensureEntry(normalizedPort);
@@ -122,7 +138,9 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
       if (!this.instances.has(normalizedPort)) {
         // Check if port exists on system
         const systemPorts = new Set(
-          (await SerialPort.list()).map((item) => item.path),
+          (await SerialPort.list()).map((item) =>
+            normalizeComPort(item.path),
+          ),
         );
         if (systemPorts.has(normalizedPort)) {
           await this.startInstance(normalizedPort);
@@ -136,7 +154,7 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
   }
 
   updatePortPhone(port: string, phone: string): ModemRuntimeState {
-    const normalizedPort = port.trim().toUpperCase();
+    const normalizedPort = normalizeComPort(port);
 
     // Ensure entry exists
     this.modemConfigService.ensureEntry(normalizedPort);
@@ -164,13 +182,14 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
     phone: string,
     message: string,
   ): Promise<{ port: string; phone: string; reference: number }> {
-    const instance = this.instances.get(port);
+    const normalizedPort = normalizeComPort(port);
+    const instance = this.instances.get(normalizedPort);
     if (!instance) {
-      throw new Error(`Modem ${port} chưa kết nối`);
+      throw new Error(`Modem ${normalizedPort} chưa kết nối`);
     }
 
     const reference = await instance.sendSms(phone, message);
-    return { port, phone, reference };
+    return { port: normalizedPort, phone, reference };
   }
 
   @OnEvent(MODEM_STATUS_EVENT)
@@ -240,11 +259,15 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Discover all COM ports on the system and sync with running instances.
-   * When autoDiscover is enabled, scans ALL system COM ports.
+   * Discover COM ports on the system and sync with running instances.
+   * When autoDiscover is enabled, scans system COM ports within portRange.
    * New ports → auto-create config entry + start instance.
-   * Removed ports → stop instance.
+   * Removed ports → stop instance and emit modem.removed.
    */
+  private async scheduleDiscoverAndSync(): Promise<void> {
+    await this.discoveryQueue.schedule(() => this.discoverAndSync());
+  }
+
   private async discoverAndSync(): Promise<void> {
     const config = this.modemConfigService.getConfig();
 
@@ -256,12 +279,14 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Auto-discover mode: scan ALL system COM ports.
+   * Auto-discover mode: scan system COM ports within configured portRange.
    */
   private async autoDiscoverPorts(
     config: ReturnType<ModemConfigService['getConfig']>,
   ): Promise<void> {
-    const systemPorts = (await SerialPort.list()).map((item) => item.path);
+    const systemPorts = (await SerialPort.list())
+      .map((item) => normalizeComPort(item.path))
+      .filter((port) => this.modemConfigService.isWithinPortRange(port));
     const systemPortSet = new Set(systemPorts);
     const previousPorts = new Set(this.knownSystemPorts);
     this.knownSystemPorts = systemPortSet;
@@ -283,17 +308,20 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    // Stop instances for ports that disappeared from system
-    for (const [port, instance] of this.instances.entries()) {
-      if (!systemPortSet.has(port)) {
-        this.logger.info(`modem.port_removed port=${port}`);
+    // Ports that left the system (or left the filtered range)
+    for (const port of previousPorts) {
+      if (systemPortSet.has(port)) {
+        continue;
+      }
+
+      const instance = this.instances.get(port);
+      if (instance) {
         await instance.stop();
         this.instances.delete(port);
-        this.eventEmitter.emit(
-          MODEM_STATUS_EVENT,
-          this.buildStateForPort(port),
-        );
       }
+
+      this.logger.info(`modem.port_removed port=${port}`);
+      this.eventEmitter.emit(MODEM_REMOVED_EVENT, { port });
     }
   }
 
@@ -321,6 +349,7 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
       if (!activePorts.includes(port)) {
         await instance.stop();
         this.instances.delete(port);
+        this.eventEmitter.emit(MODEM_REMOVED_EVENT, { port });
       }
     }
 
@@ -336,7 +365,7 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
 
   private startDiscoveryLoop(): void {
     this.discoveryTimer = setInterval(() => {
-      void this.discoverAndSync();
+      void this.scheduleDiscoverAndSync();
     }, this.modemConfigService.getConfig().reconnectIntervalMs);
   }
 

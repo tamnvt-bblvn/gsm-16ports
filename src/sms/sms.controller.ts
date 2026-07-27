@@ -1,8 +1,11 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { Public } from '../common/decorators/public.decorator';
 import { QueryMessagesDto } from './dto/query-messages.dto';
 import { SmsService } from './sms.service';
 
+/** Dashboard inbox — reachable without API key when auth is enabled. */
+@Public()
 @ApiTags('messages')
 @Controller('api/messages')
 export class SmsController {

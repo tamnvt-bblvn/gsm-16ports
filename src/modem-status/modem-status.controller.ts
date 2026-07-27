@@ -10,6 +10,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ApiOkResponse, ApiParam, ApiTags } from '@nestjs/swagger';
+import { Public } from '../common/decorators/public.decorator';
 import { ModemManager } from '../modem/modem.manager';
 import { AtCommandService } from '../modem/at-command.service';
 import type { ModemRuntimeState } from '../modem/modem.types';
@@ -17,6 +18,8 @@ import { SendSmsDto } from './dto/send-sms.dto';
 import { UpdateModemEnabledDto } from './dto/update-modem-enabled.dto';
 import { UpdateModemPhoneDto } from './dto/update-modem-phone.dto';
 
+/** Dashboard ops surface — reachable without API key when auth is enabled. */
+@Public()
 @ApiTags('modems')
 @Controller('api/modems')
 export class ModemStatusController {

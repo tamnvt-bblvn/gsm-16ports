@@ -1,6 +1,7 @@
 export const SMS_RECEIVED_EVENT = 'sms.received';
 export const OTP_RECEIVED_EVENT = 'otp.received';
 export const MODEM_STATUS_EVENT = 'modem.status';
+export const MODEM_REMOVED_EVENT = 'modem.removed';
 export const SIM_CHANGED_EVENT = 'sim.changed';
 
 export interface SmsReceivedPayload {
@@ -38,5 +39,9 @@ export interface ModemStatusPayload {
   iccid: string | null;
   lastError: string | null;
   enabled: boolean;
+}
+
+export interface ModemRemovedPayload {
+  port: string;
 }
 

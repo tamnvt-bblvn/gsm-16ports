@@ -2,6 +2,7 @@ import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { OnEvent } from '@nestjs/event-emitter';
 import { Server } from 'socket.io';
 import {
+  MODEM_REMOVED_EVENT,
   MODEM_STATUS_EVENT,
   OTP_RECEIVED_EVENT,
   SIM_CHANGED_EVENT,
@@ -9,11 +10,13 @@ import {
 } from '../common/events/app.events';
 import { decodeSmsBody } from '../common/utils/sms-body.util';
 import type {
+  ModemRemovedPayload,
   ModemStatusPayload,
   OtpReceivedPayload,
   SimChangedPayload,
   SmsReceivedPayload,
 } from '../common/events/app.events';
+import { OtpExtractor } from '../otp/otp.extractor';
 
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -22,16 +25,26 @@ export class DashboardGateway {
   @WebSocketServer()
   server!: Server;
 
+  constructor(private readonly otpExtractor: OtpExtractor) {}
+
   @OnEvent(MODEM_STATUS_EVENT)
   handleModemStatus(payload: ModemStatusPayload): void {
     this.server?.emit('modem.status', payload);
   }
 
+  @OnEvent(MODEM_REMOVED_EVENT)
+  handleModemRemoved(payload: ModemRemovedPayload): void {
+    this.server?.emit('modem.removed', payload);
+  }
+
   @OnEvent(SMS_RECEIVED_EVENT)
   handleSmsReceived(payload: SmsReceivedPayload): void {
+    const message = decodeSmsBody(payload.message);
+    const otpCode = this.otpExtractor.extract(message);
     this.server?.emit('sms.received', {
       ...payload,
-      message: decodeSmsBody(payload.message),
+      message,
+      otpCode,
       receivedAt: payload.receivedAt.toISOString(),
     });
   }
@@ -49,4 +62,3 @@ export class DashboardGateway {
     this.server?.emit('sim.changed', payload);
   }
 }
-

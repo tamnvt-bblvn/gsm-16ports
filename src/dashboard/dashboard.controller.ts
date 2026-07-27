@@ -14,6 +14,12 @@ export class DashboardController {
     res.sendFile(this.resolveAsset('index.html'));
   }
 
+  @Get('dashboard-helpers.js')
+  serveDashboardHelpers(@Res() res: Response): void {
+    const filePath = this.resolveAsset('dashboard-helpers.js');
+    res.type('application/javascript').send(fs.readFileSync(filePath, 'utf8'));
+  }
+
   @Get('dashboard.js')
   serveDashboardJs(@Res() res: Response): void {
     const filePath = this.resolveAsset('dashboard.js');
