@@ -60,6 +60,7 @@ Các biến chính (xem đầy đủ trong `.env.example`):
 | `CORS_ORIGINS`                    | `*`          | Danh sách origin, phẩy ngăn cách          |
 | `THROTTLE_TTL` / `THROTTLE_LIMIT` | `60` / `120` | Rate limit (giây / số request)            |
 | `OTP_WEBHOOK_URL`                 | —            | URL nhận OTP qua POST                     |
+| `DISCORD_WEBHOOK_URL`             | —            | Discord channel webhook nhận thông báo OTP |
 | `SWAGGER_ENABLED`                 | `true`       | Bật/tắt `/api/docs`                       |
 
 ### 4. Chạy migration
@@ -191,6 +192,14 @@ Khi đặt `OTP_WEBHOOK_URL`, mỗi OTP mới được POST dạng:
   "smsId": "42"
 }
 ```
+
+### Thông báo Discord
+
+Đặt `DISCORD_WEBHOOK_URL` để mỗi OTP mới được gửi thẳng vào một kênh Discord dạng embed (số điện thoại, cổng, mã OTP, nội dung tin nhắn):
+
+1. Trên Discord: **Server Settings → Integrations → Webhooks → New Webhook**, chọn kênh muốn nhận thông báo.
+2. Bấm **Copy Webhook URL**, dán vào `DISCORD_WEBHOOK_URL` trong `.env`.
+3. Restart service. Không cần cấu hình gì thêm — độc lập với `OTP_WEBHOOK_URL`, có thể bật cả hai cùng lúc.
 
 ## Dashboard
 

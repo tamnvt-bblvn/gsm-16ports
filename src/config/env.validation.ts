@@ -27,6 +27,10 @@ export const envValidationSchema = Joi.object({
   OTP_WEBHOOK_URL: Joi.string().uri().allow('').default(''),
   OTP_WEBHOOK_TIMEOUT_MS: Joi.number().min(500).default(5000),
 
+  // Discord webhook notification for new OTPs (optional)
+  DISCORD_WEBHOOK_URL: Joi.string().uri().allow('').default(''),
+  DISCORD_WEBHOOK_TIMEOUT_MS: Joi.number().min(500).default(5000),
+
   // Swagger
   SWAGGER_ENABLED: Joi.boolean().default(true),
 })

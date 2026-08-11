@@ -60,6 +60,14 @@ export class AppConfigService {
     return Number(this.config.get<number>('OTP_WEBHOOK_TIMEOUT_MS', 5000));
   }
 
+  get discordWebhookUrl(): string {
+    return this.config.get<string>('DISCORD_WEBHOOK_URL', '').trim();
+  }
+
+  get discordWebhookTimeoutMs(): number {
+    return Number(this.config.get<number>('DISCORD_WEBHOOK_TIMEOUT_MS', 5000));
+  }
+
   get swaggerEnabled(): boolean {
     return this.toBoolean(this.config.get('SWAGGER_ENABLED', true));
   }
