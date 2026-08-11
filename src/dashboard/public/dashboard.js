@@ -23,6 +23,7 @@ const smsSearch = document.getElementById('sms-search');
 const smsPortFilter = document.getElementById('sms-port-filter');
 const smsOnlyOtp = document.getElementById('sms-only-otp');
 const smsClear = document.getElementById('sms-clear');
+const smsSearchSubmit = document.getElementById('sms-search-submit');
 const smsModeLabel = document.getElementById('sms-mode-label');
 const smsPager = document.getElementById('sms-pager');
 const smsPagerInfo = document.getElementById('sms-pager-info');
@@ -93,6 +94,24 @@ const shouldPrependLiveSms =
   function shouldPrependLiveSmsFallback(mode) {
     return mode === 'live';
   };
+const groupSmsMessages =
+  helpers.groupSmsMessages ||
+  function groupSmsMessagesFallback(messages) {
+    return (Array.isArray(messages) ? messages : []).map((msg) => ({
+      modemPort: msg?.modemPort,
+      sender: msg?.sender ?? null,
+      message: msg?.message ?? '',
+      otpCode: msg?.otpCode ?? null,
+      receivedAt: msg?.receivedAt,
+      lastReceivedAt: msg?.receivedAt,
+      partCount: 1,
+    }));
+  };
+const formatRelativeTime = helpers.formatRelativeTime || (() => null);
+
+// Multipart SMS from the same port/sender within this window are stitched
+// into one thread instead of showing as unrelated rows.
+const SMS_GROUP_WINDOW_MS = 20_000;
 
 const modems = new Map();
 const phoneDraftByPort = new Map();
@@ -149,6 +168,29 @@ function formatDate(value) {
     second: '2-digit',
     timeZone: 'Asia/Ho_Chi_Minh',
   }).format(date);
+}
+
+function formatFeedTimestamp(receivedAt, lastReceivedAt) {
+  const absolute = formatDate(receivedAt);
+  const relative = formatRelativeTime(lastReceivedAt ?? receivedAt);
+  if (!relative) {
+    return { label: absolute, title: absolute };
+  }
+  const spansRange = lastReceivedAt && lastReceivedAt !== receivedAt;
+  return {
+    label: relative,
+    title: spansRange ? `${absolute} → ${formatDate(lastReceivedAt)}` : absolute,
+  };
+}
+
+const PORT_HUE_CLASSES = ['hue-a', 'hue-b', 'hue-c', 'hue-d', 'hue-e', 'hue-f'];
+function portHueClass(port) {
+  const str = String(port ?? '');
+  let hash = 0;
+  for (let i = 0; i < str.length; i += 1) {
+    hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  }
+  return PORT_HUE_CLASSES[hash % PORT_HUE_CLASSES.length];
 }
 
 /* ── Theme ──────────────────────────────────────────────────────────── */
@@ -625,6 +667,8 @@ function renderModems() {
   modemTableWrap.classList.remove('hidden');
   modemEmpty.classList.add('hidden');
 
+  populateSmsPortFilterOptions();
+
   modemTableBody.innerHTML = rows
     .map(
       (modem) => {
@@ -680,28 +724,81 @@ function trimFeed(list, maxItems) {
   }
 }
 
-function buildSmsItem(port, body, meta, sender, otp) {
-  const bodyHtml = sender
-    ? `<span class="sender">${escapeHtml(sender)}</span> ${escapeHtml(body)}`
-    : escapeHtml(body);
-  const otpTag = otp
-    ? `<div class="feed-otp-row"><span class="otp-chip copyable otp-code feed-otp-tag" data-otp="${escapeHtml(otp)}" title="Copy OTP">${escapeHtml(otp)}</span></div>`
+// A live SMS that arrives from the same port/sender as the row currently
+// on top, within SMS_GROUP_WINDOW_MS, is folded into that row instead of
+// starting a new one — keeps multipart telco messages as one thread even
+// as they stream in live.
+function mergeIntoTopSmsRow(list, sms, otpCode) {
+  const topRow = list.firstElementChild?.querySelector('.feed-row');
+  if (!topRow) return false;
+
+  const sameThread =
+    topRow.dataset.port === (sms.port ?? '') &&
+    topRow.dataset.sender === (sms.sender ?? '');
+  if (!sameThread) return false;
+
+  const lastAt = topRow.dataset.lastAt;
+  if (!lastAt) return false;
+  const gapMs = Math.abs(new Date(sms.receivedAt).getTime() - new Date(lastAt).getTime());
+  if (!(gapMs <= SMS_GROUP_WINDOW_MS)) return false;
+
+  const group = {
+    modemPort: sms.port,
+    sender: sms.sender,
+    message: `${topRow.dataset.rawBody} ${sms.message}`.trim(),
+    otpCode: topRow.dataset.otp || otpCode || null,
+    receivedAt: topRow.dataset.firstAt,
+    lastReceivedAt: sms.receivedAt,
+    partCount: Number(topRow.dataset.partCount || '1') + 1,
+  };
+  list.firstElementChild.innerHTML = buildSmsItem(group);
+  return true;
+}
+
+function buildSmsItem(group) {
+  const sender = group.sender ?? null;
+  const otpTag = group.otpCode
+    ? `<div class="feed-otp-row"><span class="otp-chip copyable otp-code feed-otp-tag" data-otp="${escapeHtml(group.otpCode)}" title="Copy OTP">${escapeHtml(group.otpCode)}</span></div>`
     : '';
+  const partsBadge =
+    group.partCount > 1
+      ? `<span class="feed-parts-badge" title="Gộp từ ${group.partCount} tin liên tiếp cùng cổng, cùng người gửi trong vòng ${Math.round(SMS_GROUP_WINDOW_MS / 1000)}s">×${group.partCount}</span>`
+      : '';
+  const { label: timeLabel, title: timeTitle } = formatFeedTimestamp(
+    group.receivedAt,
+    group.lastReceivedAt,
+  );
+
   return `
-    <div class="feed-row">
-      <span class="feed-port">${escapeHtml(port)}</span>
-      <p class="feed-body">${bodyHtml}</p>
-      <time class="feed-meta">${escapeHtml(meta)}</time>
+    <div
+      class="feed-row"
+      data-port="${escapeHtml(group.modemPort ?? '')}"
+      data-sender="${escapeHtml(sender ?? '')}"
+      data-first-at="${escapeHtml(group.receivedAt ?? '')}"
+      data-last-at="${escapeHtml(group.lastReceivedAt ?? group.receivedAt ?? '')}"
+      data-raw-body="${escapeHtml(group.message)}"
+      data-otp="${escapeHtml(group.otpCode ?? '')}"
+      data-part-count="${group.partCount ?? 1}"
+    >
+      <div class="feed-row-head">
+        <span class="feed-port ${portHueClass(group.modemPort)}">${escapeHtml(group.modemPort ?? '')}</span>
+        ${partsBadge}
+        ${sender ? `<span class="feed-sender mono">${escapeHtml(sender)}</span>` : ''}
+        <button type="button" class="feed-copy-btn" data-copy-body title="Copy nội dung tin nhắn">Copy</button>
+        <time class="feed-meta" data-ts data-anchor="${escapeHtml(group.lastReceivedAt ?? group.receivedAt ?? '')}" title="${escapeHtml(timeTitle)}">${escapeHtml(timeLabel)}</time>
+      </div>
+      <p class="feed-body">${escapeHtml(group.message)}</p>
       ${otpTag}
     </div>
   `;
 }
 
-function buildOtpItem(port, otp, meta) {
+function buildOtpItem(port, otp, receivedAt) {
+  const { label: timeLabel, title: timeTitle } = formatFeedTimestamp(receivedAt);
   return `
-    <span class="feed-port">${escapeHtml(port)}</span>
+    <span class="feed-port ${portHueClass(port)}">${escapeHtml(port)}</span>
     <div class="otp-chip copyable otp-code" data-otp="${escapeHtml(otp)}" title="Copy OTP">${escapeHtml(otp)}</div>
-    <time class="feed-meta">${escapeHtml(meta)}</time>
+    <time class="feed-meta" data-ts data-anchor="${escapeHtml(receivedAt ?? '')}" title="${escapeHtml(timeTitle)}">${escapeHtml(timeLabel)}</time>
   `;
 }
 
@@ -717,6 +814,22 @@ async function loadModems() {
   renderModems();
 }
 
+// `messagesNewestFirst` matches what the API always returns (orderBy
+// receivedAt desc). We group in chronological order so multipart threads
+// read correctly, then render newest-group-first to match the live
+// prepend behaviour below — the feed never silently reverses order
+// depending on whether you're looking at live or searched results.
+function renderSmsGroups(listEl, emptyEl, messagesNewestFirst) {
+  const chronological = [...messagesNewestFirst].reverse();
+  const groups = groupSmsMessages(chronological, SMS_GROUP_WINDOW_MS).reverse();
+  listEl.innerHTML = '';
+  groups.forEach((group) => {
+    appendFeedItem(listEl, emptyEl, buildSmsItem(group));
+  });
+  toggleFeedEmpty(listEl, emptyEl);
+  return groups;
+}
+
 async function loadLiveMessages() {
   const res = await fetch('/api/messages?page=1&pageSize=25');
   if (!res.ok) {
@@ -725,33 +838,18 @@ async function loadLiveMessages() {
   const payload = await res.json();
   const messages = payload.data ?? [];
 
-  smsFeed.innerHTML = '';
-  [...messages].reverse().forEach((message) => {
-    appendFeedItem(
-      smsFeed,
-      smsEmpty,
-      buildSmsItem(
-        message.modemPort,
-        message.message,
-        formatDate(message.receivedAt),
-        message.sender,
-        message.otpCode,
-      ),
-    );
-    if (message.otpCode) {
+  const groups = renderSmsGroups(smsFeed, smsEmpty, messages);
+
+  otpFeed.innerHTML = '';
+  groups.forEach((group) => {
+    if (group.otpCode) {
       appendFeedItem(
         otpFeed,
         otpEmpty,
-        buildOtpItem(
-          message.modemPort,
-          message.otpCode,
-          formatDate(message.receivedAt),
-        ),
+        buildOtpItem(group.modemPort, group.otpCode, group.lastReceivedAt),
       );
     }
   });
-
-  toggleFeedEmpty(smsFeed, smsEmpty);
   toggleFeedEmpty(otpFeed, otpEmpty);
 }
 
@@ -761,16 +859,31 @@ async function loadInitialData() {
 }
 
 /* ── Search mode ────────────────────────────────────────────────────── */
+function syncOnlyOtpChip() {
+  smsOnlyOtp?.closest('.chip-toggle')?.classList.toggle('is-checked', smsOnlyOtp.checked);
+}
+on(smsOnlyOtp, 'change', syncOnlyOtpChip);
+
+function syncModeSwitch() {
+  const isLive = smsMode === 'live';
+  smsClear.classList.toggle('is-active', isLive);
+  smsClear.setAttribute('aria-selected', String(isLive));
+  smsSearchSubmit.classList.toggle('is-active', !isLive);
+  smsSearchSubmit.setAttribute('aria-selected', String(!isLive));
+}
+
 function enterLiveMode() {
   smsMode = 'live';
   smsPager.classList.add('hidden');
   smsModeLabel.textContent = 'Realtime từ tất cả cổng';
+  syncModeSwitch();
   loadLiveMessages().catch(() => showToast('Không tải được SMS', 'error'));
 }
 
 async function runSearch(page = 1) {
   smsMode = 'search';
   searchPage = page;
+  syncModeSwitch();
 
   const params = new URLSearchParams();
   params.set('page', String(page));
@@ -789,21 +902,7 @@ async function runSearch(page = 1) {
     const messages = payload.data ?? [];
     searchTotalPages = payload.meta?.totalPages ?? 1;
 
-    smsFeed.innerHTML = '';
-    messages.forEach((message) => {
-      appendFeedItem(
-        smsFeed,
-        smsEmpty,
-        buildSmsItem(
-          message.modemPort,
-          message.message,
-          formatDate(message.receivedAt),
-          message.sender,
-          message.otpCode,
-        ),
-      );
-    });
-    toggleFeedEmpty(smsFeed, smsEmpty);
+    renderSmsGroups(smsFeed, smsEmpty, messages);
 
     smsModeLabel.textContent = `Tìm kiếm · ${payload.meta?.total ?? messages.length} tin`;
     smsPager.classList.remove('hidden');
@@ -824,8 +923,53 @@ on(smsClear, 'click', () => {
   smsSearch.value = '';
   smsPortFilter.value = '';
   smsOnlyOtp.checked = false;
+  syncOnlyOtpChip();
   enterLiveMode();
 });
+
+/* ── Port filter <select> options, kept in sync with known modems ────── */
+let lastSmsPortOptionsKey = '';
+function populateSmsPortFilterOptions() {
+  if (!smsPortFilter) return;
+  const ports = [...modems.keys()].sort((a, b) =>
+    a.localeCompare(b, undefined, { numeric: true }),
+  );
+  const key = ports.join('|');
+  if (key === lastSmsPortOptionsKey) return;
+  lastSmsPortOptionsKey = key;
+
+  const previousValue = smsPortFilter.value;
+  smsPortFilter.innerHTML =
+    '<option value="">Mọi cổng</option>' +
+    ports
+      .map((port) => `<option value="${escapeHtml(port)}">${escapeHtml(port)}</option>`)
+      .join('');
+  if (ports.includes(previousValue)) {
+    smsPortFilter.value = previousValue;
+  }
+}
+
+/* ── Copy SMS body (event delegation) ─────────────────────────────────── */
+on(smsFeed, 'click', (event) => {
+  const btn = event.target.closest('[data-copy-body]');
+  if (!btn) return;
+  const rawBody = btn.closest('.feed-row')?.dataset.rawBody;
+  if (rawBody) {
+    copyToClipboard(rawBody);
+  }
+});
+
+/* ── Keep feed timestamps fresh ("vừa xong" → "2 phút trước" → …) ────── */
+setInterval(() => {
+  document.querySelectorAll('.feed-meta[data-ts]').forEach((el) => {
+    const anchor = el.getAttribute('data-anchor');
+    if (!anchor) return;
+    const relative = formatRelativeTime(anchor);
+    if (relative) {
+      el.textContent = relative;
+    }
+  });
+}, 15_000);
 
 on(smsPrev, 'click', () => {
   if (searchPage > 1) runSearch(searchPage - 1);
@@ -1288,24 +1432,29 @@ function connectSocket() {
       attachOtpToPortChangeAlerts(sms.port, otpCode);
     }
     if (!shouldPrependLiveSms(smsMode)) return;
-    prependFeedItem(
-      smsFeed,
-      smsEmpty,
-      buildSmsItem(
-        sms.port,
-        sms.message,
-        formatDate(sms.receivedAt),
-        sms.sender,
-        otpCode,
-      ),
-    );
+
+    if (!mergeIntoTopSmsRow(smsFeed, sms, otpCode)) {
+      prependFeedItem(
+        smsFeed,
+        smsEmpty,
+        buildSmsItem({
+          modemPort: sms.port,
+          sender: sms.sender,
+          message: sms.message,
+          otpCode,
+          receivedAt: sms.receivedAt,
+          lastReceivedAt: sms.receivedAt,
+          partCount: 1,
+        }),
+      );
+    }
   });
 
   socket.on('otp.received', (otp) => {
     prependFeedItem(
       otpFeed,
       otpEmpty,
-      buildOtpItem(otp.port, otp.otp, formatDate(otp.receivedAt)),
+      buildOtpItem(otp.port, otp.otp, otp.receivedAt),
     );
     showToast(`OTP ${otp.otp} · ${otp.port}`, 'success', 5000);
     attachOtpToPortChangeAlerts(otp.port, otp.otp);
@@ -1341,6 +1490,8 @@ function connectSocket() {
     }
   }, 5000);
 }
+
+syncModeSwitch();
 
 loadInitialData().catch(() => {
   setConnectionState('is-error', 'Không tải được dữ liệu ban đầu');

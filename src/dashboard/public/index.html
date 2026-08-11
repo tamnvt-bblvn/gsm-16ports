@@ -249,21 +249,37 @@
                   placeholder="Nội dung, người gửi, OTP…"
                   aria-label="Tìm SMS"
                 />
-                <input
-                  type="text"
+                <select
                   id="sms-port-filter"
-                  class="input input-narrow"
-                  placeholder="COM"
+                  class="input input-select"
                   aria-label="Lọc theo cổng"
-                />
+                >
+                  <option value="">Mọi cổng</option>
+                </select>
               </div>
-              <label class="toggle">
+              <label class="chip-toggle">
                 <input type="checkbox" id="sms-only-otp" />
                 <span>Chỉ OTP</span>
               </label>
-              <div class="toolbar-actions">
-                <button type="submit" class="btn btn-accent">Tìm</button>
-                <button type="button" id="sms-clear" class="btn">Trực tiếp</button>
+              <div class="mode-switch" role="tablist" aria-label="Chế độ hiển thị">
+                <button
+                  type="button"
+                  id="sms-clear"
+                  class="mode-switch-btn"
+                  role="tab"
+                  aria-selected="true"
+                >
+                  Trực tiếp
+                </button>
+                <button
+                  type="submit"
+                  id="sms-search-submit"
+                  class="mode-switch-btn"
+                  role="tab"
+                  aria-selected="false"
+                >
+                  Tìm kiếm
+                </button>
               </div>
             </form>
 

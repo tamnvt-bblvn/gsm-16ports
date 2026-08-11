@@ -35,10 +35,74 @@
     return smsMode === 'live';
   }
 
+  // Telcos frequently split one long SMS into several parts that arrive
+  // seconds apart from the same port/sender. Shown as separate rows they
+  // read as unrelated noise, so we stitch parts back into one thread when
+  // they're close enough in time. `messages` must be chronological
+  // (oldest first); groups come back in the same order.
+  function groupSmsMessages(messages, windowMs = 20000) {
+    const groups = [];
+    for (const msg of Array.isArray(messages) ? messages : []) {
+      const last = groups[groups.length - 1];
+      const sender = msg?.sender ?? null;
+      const receivedAtMs = new Date(msg?.receivedAt).getTime();
+      const sameThread =
+        last &&
+        last.modemPort === msg?.modemPort &&
+        last.sender === sender &&
+        Math.abs(receivedAtMs - new Date(last.lastReceivedAt).getTime()) <= windowMs;
+
+      if (sameThread) {
+        last.message = `${last.message} ${msg.message}`.trim();
+        last.otpCode = last.otpCode ?? msg.otpCode ?? null;
+        last.lastReceivedAt = msg.receivedAt;
+        last.partCount += 1;
+        continue;
+      }
+
+      groups.push({
+        modemPort: msg?.modemPort,
+        sender,
+        message: msg?.message ?? '',
+        otpCode: msg?.otpCode ?? null,
+        receivedAt: msg?.receivedAt,
+        lastReceivedAt: msg?.receivedAt,
+        partCount: 1,
+      });
+    }
+    return groups;
+  }
+
+  // Vietnamese relative-time label for recent timestamps ("vừa xong", "5
+  // phút trước"). Returns null once the gap passes a day so the caller
+  // falls back to an absolute date instead of an unbounded "N giờ trước".
+  function formatRelativeTime(value, nowMs = Date.now()) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+    const diffMs = nowMs - date.getTime();
+    if (diffMs < 0 || diffMs >= 24 * 60 * 60 * 1000) {
+      return null;
+    }
+    if (diffMs < 10_000) {
+      return 'vừa xong';
+    }
+    if (diffMs < 60_000) {
+      return `${Math.floor(diffMs / 1000)} giây trước`;
+    }
+    if (diffMs < 60 * 60_000) {
+      return `${Math.floor(diffMs / 60_000)} phút trước`;
+    }
+    return `${Math.floor(diffMs / (60 * 60_000))} giờ trước`;
+  }
+
   return {
     normalizePhoneInput,
     isValidPhone,
     pickSmsOtpCode,
     shouldPrependLiveSms,
+    groupSmsMessages,
+    formatRelativeTime,
   };
 });
