@@ -35,6 +35,17 @@
     return smsMode === 'live';
   }
 
+  // Real SMS senders are phone numbers (<=15 digits, E.164) or short
+  // alphanumeric IDs (brand names, service short codes like "195"). Some
+  // modems occasionally mis-decode the sender field into a long digit
+  // string that isn't a real address — surfacing that prominently in the
+  // UI as if it were the sender is misleading, so we filter it out here.
+  function isDisplayableSender(sender) {
+    if (sender == null) return false;
+    const trimmed = String(sender).trim();
+    return trimmed.length > 0 && trimmed.length <= 20;
+  }
+
   // Telcos frequently split one long SMS into several parts that arrive
   // seconds apart from the same port/sender. Shown as separate rows they
   // read as unrelated noise, so we stitch parts back into one thread when
@@ -104,5 +115,6 @@
     shouldPrependLiveSms,
     groupSmsMessages,
     formatRelativeTime,
+    isDisplayableSender,
   };
 });

@@ -108,6 +108,11 @@ const groupSmsMessages =
     }));
   };
 const formatRelativeTime = helpers.formatRelativeTime || (() => null);
+const isDisplayableSender =
+  helpers.isDisplayableSender ||
+  function isDisplayableSenderFallback(sender) {
+    return sender != null && String(sender).trim().length > 0;
+  };
 
 // Multipart SMS from the same port/sender within this window are stitched
 // into one thread instead of showing as unrelated rows.
@@ -756,7 +761,8 @@ function mergeIntoTopSmsRow(list, sms, otpCode) {
 }
 
 function buildSmsItem(group) {
-  const sender = group.sender ?? null;
+  const rawSender = group.sender ?? null;
+  const displaySender = isDisplayableSender(rawSender) ? rawSender : null;
   const otpTag = group.otpCode
     ? `<div class="feed-otp-row"><span class="otp-chip copyable otp-code feed-otp-tag" data-otp="${escapeHtml(group.otpCode)}" title="Copy OTP">${escapeHtml(group.otpCode)}</span></div>`
     : '';
@@ -773,7 +779,7 @@ function buildSmsItem(group) {
     <div
       class="feed-row"
       data-port="${escapeHtml(group.modemPort ?? '')}"
-      data-sender="${escapeHtml(sender ?? '')}"
+      data-sender="${escapeHtml(rawSender ?? '')}"
       data-first-at="${escapeHtml(group.receivedAt ?? '')}"
       data-last-at="${escapeHtml(group.lastReceivedAt ?? group.receivedAt ?? '')}"
       data-raw-body="${escapeHtml(group.message)}"
@@ -783,7 +789,7 @@ function buildSmsItem(group) {
       <div class="feed-row-head">
         <span class="feed-port ${portHueClass(group.modemPort)}">${escapeHtml(group.modemPort ?? '')}</span>
         ${partsBadge}
-        ${sender ? `<span class="feed-sender mono">${escapeHtml(sender)}</span>` : ''}
+        ${displaySender ? `<span class="feed-sender mono">${escapeHtml(displaySender)}</span>` : ''}
         <button type="button" class="feed-copy-btn" data-copy-body title="Copy nội dung tin nhắn">Copy</button>
         <time class="feed-meta" data-ts data-anchor="${escapeHtml(group.lastReceivedAt ?? group.receivedAt ?? '')}" title="${escapeHtml(timeTitle)}">${escapeHtml(timeLabel)}</time>
       </div>

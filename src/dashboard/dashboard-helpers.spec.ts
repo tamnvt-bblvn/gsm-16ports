@@ -23,6 +23,7 @@ const helpers = require('./public/dashboard-helpers.js') as {
     partCount: number;
   }>;
   formatRelativeTime: (value: string, nowMs?: number) => string | null;
+  isDisplayableSender: (sender: unknown) => boolean;
 };
 
 describe('dashboard-helpers', () => {
@@ -183,6 +184,28 @@ describe('dashboard-helpers', () => {
         helpers.formatRelativeTime('2026-08-11T10:00:05.000Z', now),
       ).toBeNull();
       expect(helpers.formatRelativeTime('not-a-date', now)).toBeNull();
+    });
+  });
+
+  describe('isDisplayableSender', () => {
+    it('accepts phone numbers and short alphanumeric IDs', () => {
+      expect(helpers.isDisplayableSender('195')).toBe(true);
+      expect(helpers.isDisplayableSender('5259')).toBe(true);
+      expect(helpers.isDisplayableSender('Apple')).toBe(true);
+      expect(helpers.isDisplayableSender('+84924033230')).toBe(true);
+      expect(helpers.isDisplayableSender('Techcombank')).toBe(true);
+    });
+
+    it('rejects long digit strings that look like parser artifacts', () => {
+      expect(
+        helpers.isDisplayableSender('8410199104991111096971101907'),
+      ).toBe(false);
+    });
+
+    it('rejects null, undefined, and empty values', () => {
+      expect(helpers.isDisplayableSender(null)).toBe(false);
+      expect(helpers.isDisplayableSender(undefined)).toBe(false);
+      expect(helpers.isDisplayableSender('   ')).toBe(false);
     });
   });
 });
