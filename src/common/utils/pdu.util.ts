@@ -316,6 +316,15 @@ function bcdSwap(byte: number): number {
   return (byte & 0x0f) * 10 + ((byte >> 4) & 0x0f);
 }
 
+const VN_UTC_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+/**
+ * Vietnamese carriers stamp TP-SCTS in Vietnam local time (UTC+7, no DST).
+ * Build the instant explicitly from that offset — via Date.UTC — instead of
+ * the local `new Date(y, m, d, ...)` constructor, whose interpretation
+ * depends on the server process's OS timezone and silently produces the
+ * wrong instant if that isn't also set to Asia/Ho_Chi_Minh.
+ */
 function decodeTimestamp(bytes: Buffer): Date {
   const yy = bcdSwap(bytes[0]);
   const mm = bcdSwap(bytes[1]);
@@ -323,7 +332,8 @@ function decodeTimestamp(bytes: Buffer): Date {
   const hh = bcdSwap(bytes[3]);
   const mi = bcdSwap(bytes[4]);
   const ss = bcdSwap(bytes[5]);
-  return new Date(2000 + yy, mm - 1, dd, hh, mi, ss);
+  const asUtc = Date.UTC(2000 + yy, mm - 1, dd, hh, mi, ss);
+  return new Date(asUtc - VN_UTC_OFFSET_MS);
 }
 
 /* ── Address (originating/destination number) ─────────────────────────── */

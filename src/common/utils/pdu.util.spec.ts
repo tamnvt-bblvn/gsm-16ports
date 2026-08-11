@@ -33,11 +33,17 @@ describe('pdu.util', () => {
       expect(decoded?.sender).toBe('12345');
       expect(decoded?.text).toBe('Hi');
       expect(decoded?.reference).toBeNull();
-      expect(decoded?.timestamp.getFullYear()).toBe(2026);
-      expect(decoded?.timestamp.getMonth()).toBe(0);
-      expect(decoded?.timestamp.getDate()).toBe(15);
-      expect(decoded?.timestamp.getHours()).toBe(12);
-      expect(decoded?.timestamp.getMinutes()).toBe(30);
+      // TP-SCTS is Vietnam local time (UTC+7); the decoder builds the
+      // instant explicitly off that offset, so assert with UTC getters —
+      // local getters would depend on whatever timezone this test runs in.
+      expect(decoded?.timestamp.getTime()).toBe(
+        Date.UTC(2026, 0, 15, 12, 30, 0) - 7 * 60 * 60 * 1000,
+      );
+      expect(decoded?.timestamp.getUTCFullYear()).toBe(2026);
+      expect(decoded?.timestamp.getUTCMonth()).toBe(0);
+      expect(decoded?.timestamp.getUTCDate()).toBe(15);
+      expect(decoded?.timestamp.getUTCHours()).toBe(5); // 12:30 VN = 05:30 UTC
+      expect(decoded?.timestamp.getUTCMinutes()).toBe(30);
     });
 
     it('returns null for garbage input', () => {

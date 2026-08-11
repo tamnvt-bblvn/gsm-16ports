@@ -137,6 +137,9 @@ function formatDate(value) {
     return String(value);
   }
 
+  // Always render in Vietnam time, regardless of the server's or the
+  // viewer's own machine timezone setting — avoids confusion if either is
+  // misconfigured.
   return new Intl.DateTimeFormat('vi-VN', {
     day: '2-digit',
     month: '2-digit',
@@ -144,6 +147,7 @@ function formatDate(value) {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
+    timeZone: 'Asia/Ho_Chi_Minh',
   }).format(date);
 }
 
