@@ -1081,6 +1081,14 @@ textarea.input {
   line-height: 1.45;
 }
 
+.error-code {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  opacity: 0.8;
+}
+
 .drawer-stack {
   display: flex;
   flex-direction: column;

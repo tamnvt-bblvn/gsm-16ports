@@ -1209,11 +1209,17 @@ on(sendForm, 'submit', async (event) => {
     );
     const payload = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const errMessage = Array.isArray(payload.message)
+      const rawMessage = Array.isArray(payload.message)
         ? payload.message.join(', ')
-        : payload.message ?? 'Gửi SMS thất bại';
-      const err = new Error(errMessage);
+        : (payload.message ?? 'Gửi SMS thất bại');
+      // Prefer the human-readable description the backend already derived
+      // from the AT/CMS/CME error code — the raw message is technical
+      // protocol framing (e.g. "modem không trả +CMGS (CMS ERROR 38 ...)")
+      // that isn't meaningful to whoever is operating the dashboard.
+      const err = new Error(payload.details?.description || rawMessage);
       err.suggestion = payload.details?.suggestion ?? '';
+      err.errorCode = payload.details?.errorCode ?? '';
+      err.rawMessage = rawMessage;
       throw err;
     }
     sendHint.className = 'drawer-alert is-success';
@@ -1224,9 +1230,18 @@ on(sendForm, 'submit', async (event) => {
   } catch (error) {
     const text = error.message || 'Gửi SMS thất bại';
     const suggestion = error.suggestion || '';
+    const errorCode = error.errorCode || '';
     sendHint.className = 'drawer-alert is-error';
     sendHint.classList.remove('hidden');
-    sendHint.innerHTML = `<strong>${escapeHtml(text)}</strong>${suggestion ? `<br><small class="error-suggestion">${escapeHtml(suggestion)}</small>` : ''}`;
+    sendHint.innerHTML = [
+      `<strong>${escapeHtml(text)}</strong>`,
+      suggestion
+        ? `<br><small class="error-suggestion">${escapeHtml(suggestion)}</small>`
+        : '',
+      errorCode
+        ? `<br><small class="error-code mono">Mã lỗi: ${escapeHtml(errorCode)}</small>`
+        : '',
+    ].join('');
     showToast(text, 'error', 6000);
   } finally {
     sendSmsInFlight = false;
