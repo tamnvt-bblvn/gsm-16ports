@@ -322,7 +322,7 @@ body {
   display: grid;
   grid-template-columns: 1.35fr 0.65fr;
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .section-grow {
