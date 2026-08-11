@@ -353,11 +353,43 @@ portChangeCountdownTimer = setInterval(() => {
   }
 }, 1000);
 
-async function copyToClipboard(text) {
+function copyWithExecCommand(text) {
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.top = '-9999px';
+  textarea.style.left = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.select();
+  textarea.setSelectionRange(0, text.length);
+  let ok = false;
   try {
-    await navigator.clipboard.writeText(text);
-    showToast(`Đã copy: ${text}`, 'success', 2000);
+    ok = document.execCommand('copy');
   } catch {
+    ok = false;
+  }
+  document.body.removeChild(textarea);
+  return ok;
+}
+
+async function copyToClipboard(text) {
+  // navigator.clipboard requires a secure context (HTTPS or localhost).
+  // Internal deployments served over plain HTTP don't get it at all, so
+  // fall back to the execCommand('copy') trick in that case.
+  if (window.isSecureContext && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(`Đã copy: ${text}`, 'success', 2000);
+      return;
+    } catch {
+      // fall through to legacy fallback below
+    }
+  }
+
+  if (copyWithExecCommand(text)) {
+    showToast(`Đã copy: ${text}`, 'success', 2000);
+  } else {
     showToast('Không thể copy', 'error');
   }
 }
