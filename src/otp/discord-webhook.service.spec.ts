@@ -7,7 +7,7 @@ interface DiscordEmbedField {
 }
 
 interface DiscordEmbedBody {
-  embeds: Array<{ fields: DiscordEmbedField[] }>;
+  embeds: Array<{ description: string; fields: DiscordEmbedField[] }>;
 }
 
 type FetchMock = jest.Mock<
@@ -83,6 +83,9 @@ describe('DiscordWebhookService', () => {
 
     const body = getSentBody(fetchMock);
     expect(body.embeds).toHaveLength(1);
+    // The OTP is the visual focal point — a big markdown heading in the
+    // embed description, not squeezed into a small field.
+    expect(body.embeds[0].description).toBe('# `123456`');
     expect(body.embeds[0].fields).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -90,7 +93,6 @@ describe('DiscordWebhookService', () => {
           value: '0987654321',
         }),
         expect.objectContaining({ name: '🔌 Cổng', value: 'COM3' }),
-        expect.objectContaining({ name: '🔢 Mã OTP', value: '`123456`' }),
       ]),
     );
   });

@@ -63,6 +63,9 @@ export class DiscordWebhookService {
       embeds: [
         {
           title: '🔑 OTP mới nhận được',
+          // Big markdown heading so the code is the visual focal point,
+          // instead of being squeezed into a small field next to phone/port.
+          description: `# \`${payload.otp}\``,
           color: EMBED_COLOR,
           fields: [
             {
@@ -71,7 +74,6 @@ export class DiscordWebhookService {
               inline: true,
             },
             { name: '🔌 Cổng', value: payload.port, inline: true },
-            { name: '🔢 Mã OTP', value: `\`${payload.otp}\``, inline: true },
             { name: '💬 Nội dung tin nhắn', value: truncatedMessage || '—' },
           ],
           timestamp: payload.receivedAt.toISOString(),
