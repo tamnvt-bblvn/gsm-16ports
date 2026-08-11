@@ -59,21 +59,29 @@ export class SmsParser {
       return;
     }
 
+    // Stamp with the server's own clock at the moment we actually received
+    // this line, rather than the network's TP-SCTS field — the network
+    // timestamp isn't reliably trustworthy across carriers/modems, while
+    // "when did our gateway see this" is unambiguous and what matters for
+    // time-sensitive OTP handling.
+    const receivedAt = new Date();
+
     if (
       decoded.reference === null ||
       decoded.totalParts === null ||
       decoded.partNumber === null
     ) {
-      this.emit(port, decoded.sender, decoded.text, decoded.timestamp);
+      this.emit(port, decoded.sender, decoded.text, receivedAt);
       return;
     }
 
-    this.addPart(port, decoded);
+    this.addPart(port, decoded, receivedAt);
   }
 
   private addPart(
     port: string,
     decoded: NonNullable<ReturnType<typeof decodeDeliverPdu>>,
+    receivedAt: Date,
   ): void {
     const key = `${port}:${decoded.sender}:${decoded.reference}`;
     let group = this.groups.get(key);
@@ -81,7 +89,7 @@ export class SmsParser {
     if (!group) {
       group = {
         sender: decoded.sender,
-        receivedAt: decoded.timestamp,
+        receivedAt,
         total: decoded.totalParts!,
         parts: new Map(),
         timer: setTimeout(
@@ -93,8 +101,8 @@ export class SmsParser {
     }
 
     group.parts.set(decoded.partNumber!, decoded.text);
-    if (decoded.timestamp < group.receivedAt) {
-      group.receivedAt = decoded.timestamp;
+    if (receivedAt < group.receivedAt) {
+      group.receivedAt = receivedAt;
     }
 
     if (group.parts.size >= group.total) {

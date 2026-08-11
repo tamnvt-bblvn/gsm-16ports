@@ -49,6 +49,27 @@ function makeParser() {
 }
 
 describe('SmsParser (PDU mode +CMT)', () => {
+  it('stamps receivedAt with the server clock, not the network TP-SCTS embedded in the PDU', () => {
+    const { parser, eventEmitter } = makeParser();
+    const received = jest.fn<void, [EmittedSms]>();
+    eventEmitter.on('sms.received', received);
+
+    // submitToDeliverPdu bakes in a fixed dummy SCTS of 2026-01-15 12:30:00 —
+    // if receivedAt came from the PDU, every message would show that date.
+    const pdu = submitToDeliverPdu(
+      encodeSubmitPdu('0901234567', 'Ma OTP la 999888')[0].pdu,
+    );
+
+    const before = Date.now();
+    parser.parseLine('COM9', '+CMT: ,20');
+    parser.parseLine('COM9', pdu);
+    const after = Date.now();
+
+    const receivedAt = received.mock.calls[0][0].receivedAt;
+    expect(receivedAt.getTime()).toBeGreaterThanOrEqual(before);
+    expect(receivedAt.getTime()).toBeLessThanOrEqual(after);
+  });
+
   it('emits a single-part message immediately after the CMT header + PDU line', () => {
     const { parser, eventEmitter } = makeParser();
     const received = jest.fn<void, [EmittedSms]>();
