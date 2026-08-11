@@ -514,6 +514,11 @@ body {
   min-width: 200px;
 }
 
+.toolbar-fields #sms-search {
+  flex: 1 1 160px;
+  min-width: 120px;
+}
+
 .chip-toggle {
   display: inline-flex;
   align-items: center;
@@ -592,8 +597,9 @@ body {
 }
 
 .input-select {
+  flex: 0 0 116px;
   width: 116px;
-  flex-shrink: 0;
+  min-width: 116px;
   font-family: var(--mono);
   cursor: pointer;
 }
