@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { extractGsmTimestampFromLine } from '../common/utils/gsm-timestamp.util';
+import { decodeDeliverPdu } from '../common/utils/pdu.util';
 
 export interface SimInboxMessage {
   index: number;
@@ -8,11 +8,22 @@ export interface SimInboxMessage {
   receivedAt: Date;
 }
 
+interface DecodedEntry {
+  index: number;
+  sender: string;
+  text: string;
+  receivedAt: Date;
+  reference: number | null;
+  partNumber: number | null;
+  totalParts: number | null;
+}
+
 @Injectable()
 export class SimInboxParser {
+  /** Parses a PDU-mode AT+CMGL=4 response, reassembling concatenated SMS. */
   parseCmglResponse(lines: string[]): SimInboxMessage[] {
-    const messages: SimInboxMessage[] = [];
-    let current: Omit<SimInboxMessage, 'message'> | null = null;
+    const entries: DecodedEntry[] = [];
+    let pendingIndex: number | null = null;
 
     for (const rawLine of lines) {
       const line = rawLine.trim();
@@ -20,33 +31,79 @@ export class SimInboxParser {
         continue;
       }
 
-      const header = /^\+CMGL:\s*(\d+),"[^"]*","([^"]*)"/i.exec(line);
+      const header = /^\+CMGL:\s*(\d+),\d+,[^,]*,\d+/i.exec(line);
       if (header) {
-        if (current) {
-          messages.push({ ...current, message: '' });
-        }
-
-        current = {
-          index: Number.parseInt(header[1], 10),
-          sender: header[2] ?? '',
-          receivedAt: extractGsmTimestampFromLine(line) ?? new Date(),
-        };
+        pendingIndex = Number.parseInt(header[1], 10);
         continue;
       }
 
-      if (current) {
-        messages.push({
-          ...current,
-          message: line,
-        });
-        current = null;
+      if (pendingIndex === null) {
+        continue;
       }
+
+      const decoded = decodeDeliverPdu(line);
+      if (decoded) {
+        entries.push({
+          index: pendingIndex,
+          sender: decoded.sender,
+          text: decoded.text,
+          receivedAt: decoded.timestamp,
+          reference: decoded.reference,
+          partNumber: decoded.partNumber,
+          totalParts: decoded.totalParts,
+        });
+      }
+      pendingIndex = null;
     }
 
-    if (current) {
-      messages.push({ ...current, message: '' });
+    return this.reassemble(entries).filter(
+      (item) => item.message.trim().length > 0,
+    );
+  }
+
+  private reassemble(entries: DecodedEntry[]): SimInboxMessage[] {
+    const singles: SimInboxMessage[] = [];
+    const groups = new Map<string, DecodedEntry[]>();
+
+    for (const entry of entries) {
+      if (
+        entry.reference === null ||
+        entry.partNumber === null ||
+        entry.totalParts === null
+      ) {
+        singles.push({
+          index: entry.index,
+          sender: entry.sender,
+          message: entry.text,
+          receivedAt: entry.receivedAt,
+        });
+        continue;
+      }
+
+      const key = `${entry.sender}:${entry.reference}:${entry.totalParts}`;
+      const group = groups.get(key) ?? [];
+      group.push(entry);
+      groups.set(key, group);
     }
 
-    return messages.filter((item) => item.message.trim().length > 0);
+    const combined: SimInboxMessage[] = Array.from(groups.values()).map(
+      (parts) => {
+        const sorted = [...parts].sort(
+          (a, b) => (a.partNumber ?? 0) - (b.partNumber ?? 0),
+        );
+        return {
+          index: Math.min(...sorted.map((p) => p.index)),
+          sender: sorted[0].sender,
+          message: sorted.map((p) => p.text).join(''),
+          receivedAt: sorted.reduce(
+            (earliest, p) =>
+              p.receivedAt < earliest ? p.receivedAt : earliest,
+            sorted[0].receivedAt,
+          ),
+        };
+      },
+    );
+
+    return [...singles, ...combined].sort((a, b) => a.index - b.index);
   }
 }

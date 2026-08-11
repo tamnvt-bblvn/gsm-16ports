@@ -10,6 +10,7 @@ import {
   SMS_RECEIVED_EVENT,
 } from '../common/events/app.events';
 import { normalizePhone } from '../common/utils/phone.util';
+import { encodeSubmitPdu } from '../common/utils/pdu.util';
 import { AtCommandService, type SimState } from './at-command.service';
 import { ModemConnectionStatus, ModemRuntimeState } from './modem.types';
 import { SimInboxParser } from './sim-inbox.parser';
@@ -131,7 +132,9 @@ export class ModemInstance {
         return;
       }
 
-      await this.sendCommand('AT+CMGF=1', timeout, true);
+      // PDU mode: text mode can't expose the UDH concatenation info that
+      // long/split SMS need to be reassembled correctly.
+      await this.sendCommand('AT+CMGF=0', timeout, true);
       await this.sendCommand('AT+CNMI=2,2,0,0,0', timeout, true);
 
       // Read ICCID on first connect
@@ -248,7 +251,7 @@ export class ModemInstance {
 
     try {
       const lines = await this.sendCommand(
-        'AT+CMGL="ALL"',
+        'AT+CMGL=4',
         config.simSyncTimeoutMs,
       );
       const storedMessages = this.simInboxParser.parseCmglResponse(lines);
@@ -431,11 +434,7 @@ export class ModemInstance {
     }
 
     if (this.atCommandService.isUnsolicited(trimmed)) {
-      const sms = this.smsParser.parseLine(this.portName, trimmed);
-      if (sms) {
-        this.logger.log(`sms.received port=${sms.port} sender=${sms.sender}`);
-        this.eventEmitter.emit(SMS_RECEIVED_EVENT, sms);
-      }
+      this.smsParser.parseLine(this.portName, trimmed);
       return;
     }
 
@@ -458,11 +457,7 @@ export class ModemInstance {
       return;
     }
 
-    const sms = this.smsParser.parseLine(this.portName, trimmed);
-    if (sms) {
-      this.logger.log(`sms.received port=${sms.port} sender=${sms.sender}`);
-      this.eventEmitter.emit(SMS_RECEIVED_EVENT, sms);
-    }
+    this.smsParser.parseLine(this.portName, trimmed);
   }
 
   private sendCommand(
@@ -571,6 +566,8 @@ export class ModemInstance {
     // Run pre-flight checks before attempting to send
     await this.preFlightSmsCheck(phone);
 
+    const parts = encodeSubmitPdu(phone, message);
+
     return new Promise<number>((resolve, reject) => {
       this.commandChain = this.commandChain
         .then(async () => {
@@ -578,8 +575,50 @@ export class ModemInstance {
             throw new Error(`Cổng ${this.portName} chưa mở`);
           }
 
-          const config = this.modemConfigService.getConfig();
-          await this.writeRaw(`AT+CMGS="${phone}"\r`);
+          let lastReference = -1;
+          for (const part of parts) {
+            lastReference = await this.sendPduPart(
+              phone,
+              part.pdu,
+              part.tpduLength,
+            );
+          }
+          return lastReference;
+        })
+        .then((reference) => {
+          this.state.lastError = null;
+          this.logger.log(
+            `sms.sent port=${this.portName} to=${phone} parts=${parts.length}`,
+          );
+          resolve(reference);
+        })
+        .catch((error: Error) => {
+          this.state.lastError = error.message;
+          this.logger.warn(
+            `sms.send_failed port=${this.portName} to=${phone} reason=${error.message}`,
+          );
+          this.emitStatus();
+          reject(error);
+        });
+    });
+  }
+
+  /** Submits a single PDU part (one physical SMS-SUBMIT) and returns its TP-MR reference. */
+  private sendPduPart(
+    phone: string,
+    pduHex: string,
+    tpduLength: number,
+  ): Promise<number> {
+    return new Promise<number>((resolve, reject) => {
+      void (async () => {
+        if (!this.port?.isOpen) {
+          reject(new Error(`Cổng ${this.portName} chưa mở`));
+          return;
+        }
+
+        const config = this.modemConfigService.getConfig();
+        try {
+          await this.writeRaw(`AT+CMGS=${tpduLength}\r`);
           try {
             await this.awaitPromptCharacter(config.atCommandTimeoutMs, phone);
           } catch (error) {
@@ -612,7 +651,7 @@ export class ModemInstance {
               timer,
             };
 
-            this.writeRaw(`${message}\u001a`).catch((error: Error) => {
+            this.writeRaw(`${pduHex}\u001a`).catch((error: Error) => {
               clearTimeout(timer);
               this.activeCommand = null;
               cmdReject(error);
@@ -625,21 +664,11 @@ export class ModemInstance {
               `${this.portName} → ${phone}: modem không trả +CMGS (${this.atCommandService.formatFailureMessage(lines)})`,
             );
           }
-          return reference;
-        })
-        .then((reference) => {
-          this.state.lastError = null;
-          this.logger.log(`sms.sent port=${this.portName} to=${phone}`);
           resolve(reference);
-        })
-        .catch((error: Error) => {
-          this.state.lastError = error.message;
-          this.logger.warn(
-            `sms.send_failed port=${this.portName} to=${phone} reason=${error.message}`,
-          );
-          this.emitStatus();
-          reject(error);
-        });
+        } catch (error) {
+          reject(error as Error);
+        }
+      })();
     });
   }
 
