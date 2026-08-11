@@ -14,7 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/dashboard.css?v=20260727c" />
+    <link rel="stylesheet" href="/dashboard.css?v=20260811a" />
   </head>
   <body>
     <a class="skip-link" href="#main-content">Chuyển tới nội dung</a>
@@ -141,6 +141,12 @@
       </header>
 
       <main id="main-content" class="main">
+        <div
+          id="port-change-alerts"
+          class="port-change-alerts hidden"
+          aria-live="assertive"
+        ></div>
+
         <section class="section" aria-labelledby="modems-heading">
           <div class="section-head">
             <div>
@@ -547,7 +553,7 @@
     <div class="toasts" id="toast-stack" aria-live="assertive"></div>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="/dashboard-helpers.js?v=20260727c"></script>
-    <script src="/dashboard.js?v=20260727c"></script>
+    <script src="/dashboard-helpers.js?v=20260811a"></script>
+    <script src="/dashboard.js?v=20260811a"></script>
   </body>
 </html>

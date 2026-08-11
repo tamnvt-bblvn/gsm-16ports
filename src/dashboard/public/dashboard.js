@@ -16,6 +16,7 @@ const statSimReady = document.getElementById('stat-sim-ready');
 
 const themeToggle = document.getElementById('theme-toggle');
 const toastStack = document.getElementById('toast-stack');
+const portChangeAlerts = document.getElementById('port-change-alerts');
 
 const smsToolbar = document.getElementById('sms-toolbar');
 const smsSearch = document.getElementById('sms-search');
@@ -185,6 +186,172 @@ function showToast(message, variant = 'info', timeout = 3600) {
     setTimeout(() => toast.remove(), 240);
   }, timeout);
 }
+
+/* ── Port-change alerts (SIM moved to a different modem/device) ──────── */
+/* From 15/6/2026, moving a SIM to a different device/IMEI requires face
+   re-authentication within 2h or the line gets locked. We persist these
+   alerts in localStorage so a page refresh mid-window doesn't lose them. */
+const PORT_CHANGE_ALERTS_KEY = 'gsm-port-change-alerts';
+const PORT_CHANGE_REAUTH_WINDOW_MS = 2 * 60 * 60 * 1000;
+const portChangeAlertState = new Map();
+let portChangeCountdownTimer = null;
+
+function loadPersistedPortChangeAlerts() {
+  let stored = [];
+  try {
+    stored = JSON.parse(localStorage.getItem(PORT_CHANGE_ALERTS_KEY) ?? '[]');
+  } catch {
+    stored = [];
+  }
+  const now = Date.now();
+  for (const alert of Array.isArray(stored) ? stored : []) {
+    if (!alert?.iccid || !alert?.detectedAt) continue;
+    if (now - new Date(alert.detectedAt).getTime() > PORT_CHANGE_REAUTH_WINDOW_MS) {
+      continue;
+    }
+    portChangeAlertState.set(alert.iccid, alert);
+  }
+  renderPortChangeAlerts();
+}
+
+function persistPortChangeAlerts() {
+  try {
+    localStorage.setItem(
+      PORT_CHANGE_ALERTS_KEY,
+      JSON.stringify(Array.from(portChangeAlertState.values())),
+    );
+  } catch {
+    /* ignore storage errors */
+  }
+}
+
+function formatCountdown(msRemaining) {
+  if (msRemaining <= 0) return 'đã hết hạn';
+  const totalSeconds = Math.floor(msRemaining / 1000);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return `còn ${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function renderPortChangeAlerts() {
+  if (!portChangeAlerts) return;
+  const alerts = Array.from(portChangeAlertState.values()).sort(
+    (a, b) => new Date(b.detectedAt) - new Date(a.detectedAt),
+  );
+
+  if (!alerts.length) {
+    portChangeAlerts.classList.add('hidden');
+    portChangeAlerts.innerHTML = '';
+    return;
+  }
+
+  portChangeAlerts.classList.remove('hidden');
+  portChangeAlerts.innerHTML = alerts
+    .map((alert) => {
+      const phoneLabel = alert.phone
+        ? escapeHtml(alert.phone)
+        : `SIM …${escapeHtml(alert.iccid.slice(-6))}`;
+      const otpBlock = alert.otp
+        ? `<span class="pca-otp">OTP mới nhất: <strong class="mono">${escapeHtml(alert.otp)}</strong> · dùng để hoàn tất xác thực</span>`
+        : `<span class="pca-otp-wait">Đang chờ OTP xác thực đổi máy...</span>`;
+      return `
+        <div class="port-change-alert" data-iccid="${escapeHtml(alert.iccid)}">
+          <div class="pca-head">
+            <span class="pca-badge">Cần xác thực lại SIM</span>
+            <button
+              type="button"
+              class="pca-dismiss"
+              data-dismiss-iccid="${escapeHtml(alert.iccid)}"
+              aria-label="Đóng cảnh báo"
+            >×</button>
+          </div>
+          <p class="pca-desc">
+            ${phoneLabel} vừa chuyển từ <strong>${escapeHtml(alert.previousPort)}</strong>
+            sang <strong>${escapeHtml(alert.newPort)}</strong>. Theo quy định từ 15/6/2026,
+            cần xác thực lại khuôn mặt trong vòng 2 giờ (vd. app Viettel Tammi &rarr;
+            "Xác thực đổi máy") kẻo bị khóa 1 chiều.
+          </p>
+          <div class="pca-meta">
+            <span class="pca-countdown mono" data-countdown-iccid="${escapeHtml(alert.iccid)}"
+              >${formatCountdown(PORT_CHANGE_REAUTH_WINDOW_MS - (Date.now() - new Date(alert.detectedAt).getTime()))}</span
+            >
+            ${otpBlock}
+          </div>
+        </div>`;
+    })
+    .join('');
+}
+
+function addPortChangeAlert(data) {
+  if (!data?.iccid) return;
+  const existing = portChangeAlertState.get(data.iccid);
+  portChangeAlertState.set(data.iccid, {
+    iccid: data.iccid,
+    previousPort: data.previousPort,
+    newPort: data.newPort,
+    phone: data.phone ?? existing?.phone ?? null,
+    detectedAt: data.detectedAt,
+    otp: existing?.otp ?? null,
+  });
+  persistPortChangeAlerts();
+  renderPortChangeAlerts();
+  showToast(
+    `SIM đổi cổng ${data.previousPort} → ${data.newPort}. Cần xác thực khuôn mặt trong 2h.`,
+    'error',
+    9000,
+  );
+}
+
+function attachOtpToPortChangeAlerts(port, otp) {
+  let changed = false;
+  for (const alert of portChangeAlertState.values()) {
+    if (alert.newPort === port) {
+      alert.otp = otp;
+      changed = true;
+    }
+  }
+  if (changed) {
+    persistPortChangeAlerts();
+    renderPortChangeAlerts();
+  }
+}
+
+function dismissPortChangeAlert(iccid) {
+  portChangeAlertState.delete(iccid);
+  persistPortChangeAlerts();
+  renderPortChangeAlerts();
+}
+
+on(portChangeAlerts, 'click', (event) => {
+  const btn = event.target.closest('[data-dismiss-iccid]');
+  if (!btn) return;
+  dismissPortChangeAlert(btn.getAttribute('data-dismiss-iccid'));
+});
+
+loadPersistedPortChangeAlerts();
+portChangeCountdownTimer = setInterval(() => {
+  if (!portChangeAlertState.size) return;
+  const now = Date.now();
+  let expired = false;
+  for (const [iccid, alert] of portChangeAlertState) {
+    const remaining =
+      PORT_CHANGE_REAUTH_WINDOW_MS - (now - new Date(alert.detectedAt).getTime());
+    if (remaining <= 0) {
+      portChangeAlertState.delete(iccid);
+      expired = true;
+      continue;
+    }
+    const el = portChangeAlerts?.querySelector(
+      `[data-countdown-iccid="${CSS.escape(iccid)}"]`,
+    );
+    if (el) el.textContent = formatCountdown(remaining);
+  }
+  if (expired) {
+    persistPortChangeAlerts();
+    renderPortChangeAlerts();
+  }
+}, 1000);
 
 async function copyToClipboard(text) {
   try {
@@ -1065,6 +1232,10 @@ function connectSocket() {
   });
 
   socket.on('sms.received', (sms) => {
+    const otpCode = pickSmsOtpCode(sms);
+    if (otpCode) {
+      attachOtpToPortChangeAlerts(sms.port, otpCode);
+    }
     if (!shouldPrependLiveSms(smsMode)) return;
     prependFeedItem(
       smsFeed,
@@ -1074,7 +1245,7 @@ function connectSocket() {
         sms.message,
         formatDate(sms.receivedAt),
         sms.sender,
-        pickSmsOtpCode(sms),
+        otpCode,
       ),
     );
   });
@@ -1086,6 +1257,11 @@ function connectSocket() {
       buildOtpItem(otp.port, otp.otp, formatDate(otp.receivedAt)),
     );
     showToast(`OTP ${otp.otp} · ${otp.port}`, 'success', 5000);
+    attachOtpToPortChangeAlerts(otp.port, otp.otp);
+  });
+
+  socket.on('sim.port_changed', (data) => {
+    addPortChangeAlert(data);
   });
 
   socket.on('sim.changed', (data) => {

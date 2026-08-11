@@ -3,6 +3,8 @@ export const OTP_RECEIVED_EVENT = 'otp.received';
 export const MODEM_STATUS_EVENT = 'modem.status';
 export const MODEM_REMOVED_EVENT = 'modem.removed';
 export const SIM_CHANGED_EVENT = 'sim.changed';
+export const SIM_ICCID_OBSERVED_EVENT = 'sim.iccid_observed';
+export const SIM_PORT_CHANGED_EVENT = 'sim.port_changed';
 
 export interface SmsReceivedPayload {
   port: string;
@@ -29,6 +31,21 @@ export interface SimChangedPayload {
   newPhone: string | null;
 }
 
+export interface SimIccidObservedPayload {
+  port: string;
+  iccid: string;
+  phone: string | null;
+}
+
+export interface SimPortChangedPayload {
+  iccid: string;
+  previousPort: string;
+  newPort: string;
+  phone: string | null;
+  previousSeenAt: Date;
+  detectedAt: Date;
+}
+
 export interface ModemStatusPayload {
   port: string;
   status: 'online' | 'offline' | 'connecting' | 'no_sim' | 'disabled';
@@ -44,4 +61,3 @@ export interface ModemStatusPayload {
 export interface ModemRemovedPayload {
   port: string;
 }
-

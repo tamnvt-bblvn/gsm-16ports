@@ -12,7 +12,9 @@ describe('OtpExtractor', () => {
   });
 
   it('extracts OTP from "la" pattern', () => {
-    expect(extractor.extract('Ma OTP cua QTV la 831746 co hieu luc')).toBe('831746');
+    expect(extractor.extract('Ma OTP cua QTV la 831746 co hieu luc')).toBe(
+      '831746',
+    );
   });
 
   it('does not treat hotline numbers as OTP', () => {
@@ -32,9 +34,9 @@ describe('OtpExtractor', () => {
   });
 
   it('still extracts standalone OTP in generic message', () => {
-    expect(extractor.extract('Your verification code is 442891. Do not share.')).toBe(
-      '442891',
-    );
+    expect(
+      extractor.extract('Your verification code is 442891. Do not share.'),
+    ).toBe('442891');
   });
 
   it('extracts Apple OTP and ignores long sender prefix', () => {
@@ -59,5 +61,59 @@ describe('OtpExtractor', () => {
         'Ma giao dich 20260506.3011291250 hoan tat thanh cong.',
       ),
     ).toBeNull();
+  });
+
+  it('extracts Google/Play Console OTP with G- prefix', () => {
+    expect(
+      extractor.extract('G-123456 is your Google verification code.'),
+    ).toBe('123456');
+  });
+
+  it('extracts Google OTP repeated as autofill hash anchor', () => {
+    expect(
+      extractor.extract(
+        "G-694216 is your Google verification code. Don't share this code with anyone. @accounts.google.com #694216",
+      ),
+    ).toBe('694216');
+  });
+
+  it('extracts OTP from generic "NNNNNN is your ... code" format', () => {
+    expect(
+      extractor.extract(
+        '123456 is your verification code for Google Play Console.',
+      ),
+    ).toBe('123456');
+  });
+
+  it('extracts Apple OTP with rebranded "Apple Account Code" wording', () => {
+    expect(
+      extractor.extract(
+        "Your Apple Account Code is: 654321. Don't share it with anyone.",
+      ),
+    ).toBe('654321');
+  });
+
+  it('does not treat order reference number preceded by "don hang" as OTP', () => {
+    expect(
+      extractor.extract(
+        'Ma OTP cua ban la 384729. Don hang 9273841 dang duoc xu ly.',
+      ),
+    ).toBe('384729');
+  });
+
+  it('prefers the earliest plausible number over a trailing unrelated number when no keyword matches', () => {
+    expect(
+      extractor.extract(
+        'Xin chao, 384729 se het han sau 5 phut lien he chi nhanh 552910 de duoc ho tro.',
+      ),
+    ).toBe('384729');
+  });
+
+  it('prefers a number repeated in the message over a non-repeated trailing number', () => {
+    expect(
+      extractor.extract(
+        '384729 xac nhan giao dich cua ban. Ma tham chieu 552910. 384729',
+      ),
+    ).toBe('384729');
   });
 });

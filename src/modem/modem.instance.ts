@@ -6,6 +6,7 @@ import { ModemConfigService } from '../config/modem-config.service';
 import {
   MODEM_STATUS_EVENT,
   SIM_CHANGED_EVENT,
+  SIM_ICCID_OBSERVED_EVENT,
   SMS_RECEIVED_EVENT,
 } from '../common/events/app.events';
 import { normalizePhone } from '../common/utils/phone.util';
@@ -367,6 +368,14 @@ export class ModemInstance {
     // If we couldn't read ICCID before and still can't, skip
     if (!oldIccid && !newIccid) {
       return;
+    }
+
+    if (newIccid) {
+      this.eventEmitter.emit(SIM_ICCID_OBSERVED_EVENT, {
+        port: this.portName,
+        iccid: newIccid,
+        phone: this.state.phone,
+      });
     }
 
     // Same SIM, no change

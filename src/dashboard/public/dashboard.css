@@ -1255,6 +1255,89 @@ textarea.input {
   border-left: 3px solid var(--warn);
 }
 
+/* ── Port-change alerts (SIM moved to a different modem/device) ───────── */
+
+.port-change-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 18px 18px 0;
+}
+
+.port-change-alerts.hidden {
+  display: none;
+}
+
+.port-change-alert {
+  border-radius: var(--radius);
+  border: 1px solid rgba(251, 113, 133, 0.32);
+  background: var(--danger-dim);
+  padding: 12px 14px;
+  animation: drawer-in 200ms var(--ease) both;
+}
+
+.pca-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pca-badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--danger);
+}
+
+.pca-dismiss {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  opacity: 0.7;
+}
+
+.pca-dismiss:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.pca-desc {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.pca-meta {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.pca-countdown {
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.pca-otp {
+  color: var(--ok);
+}
+
+.pca-otp-wait {
+  color: var(--text-secondary);
+  opacity: 0.85;
+}
+
 /* ── Phone setup panel (cockpit disclosure) ──────────────────────────── */
 
 .phone-setup {

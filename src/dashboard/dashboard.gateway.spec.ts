@@ -55,4 +55,26 @@ describe('DashboardGateway', () => {
     gateway.handleModemRemoved({ port: 'COM5' });
     expect(emit).toHaveBeenCalledWith('modem.removed', { port: 'COM5' });
   });
+
+  it('forwards sim.port_changed with ISO timestamps', () => {
+    gateway.handleSimPortChanged({
+      iccid: '8984012345678901234',
+      previousPort: 'COM3',
+      newPort: 'COM7',
+      phone: '0987654321',
+      previousSeenAt: new Date('2026-07-01T00:00:00.000Z'),
+      detectedAt: new Date('2026-08-11T04:00:00.000Z'),
+    });
+
+    expect(emit).toHaveBeenCalledWith(
+      'sim.port_changed',
+      expect.objectContaining({
+        iccid: '8984012345678901234',
+        previousPort: 'COM3',
+        newPort: 'COM7',
+        previousSeenAt: '2026-07-01T00:00:00.000Z',
+        detectedAt: '2026-08-11T04:00:00.000Z',
+      }),
+    );
+  });
 });

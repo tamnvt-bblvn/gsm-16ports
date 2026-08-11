@@ -35,3 +35,17 @@ model ModemState {
 
   @@map("modem_states")
 }
+
+/// Tracks which port each SIM (by ICCID) was last seen on, across app
+/// restarts, so we can detect when a SIM physically moves to a different
+/// modem/device (a "device change" the carrier's biometric re-auth policy
+/// cares about) rather than just a same-port SIM swap.
+model SimIccidHistory {
+  iccid       String   @id @db.VarChar(22)
+  lastPort    String   @map("last_port") @db.VarChar(20)
+  phone       String?  @db.VarChar(30)
+  firstSeenAt DateTime @default(now()) @map("first_seen_at")
+  lastSeenAt  DateTime @updatedAt @map("last_seen_at")
+
+  @@map("sim_iccid_history")
+}
