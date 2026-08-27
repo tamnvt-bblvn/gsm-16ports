@@ -8,6 +8,11 @@
       content="Theo dõi 16 modem GSM, SMS và OTP realtime"
     />
     <title>GSM OTP · Operations</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'%3E%3Crect width='28' height='28' rx='6' fill='%23080a0e'/%3E%3Crect x='4' y='4' width='8' height='8' rx='2' fill='%2322d3ee' opacity='0.9'/%3E%3Crect x='16' y='4' width='8' height='8' rx='2' fill='%2322d3ee' opacity='0.5'/%3E%3Crect x='4' y='16' width='8' height='8' rx='2' fill='%2322d3ee' opacity='0.5'/%3E%3Crect x='16' y='16' width='8' height='8' rx='2' fill='%2322d3ee' opacity='0.9'/%3E%3C/svg%3E"
+    />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -103,6 +108,26 @@
 
         <div class="header-actions">
           <div
+            id="discord-status"
+            class="conn-badge"
+            role="status"
+            aria-live="polite"
+            title="Trạng thái webhook Discord"
+          >
+            <span class="conn-dot"></span>
+            <span class="connection-label" id="discord-status-label"
+              >Discord: đang kiểm tra...</span
+            >
+          </div>
+          <button
+            id="discord-test-btn"
+            class="btn-ghost"
+            type="button"
+            title="Gửi tin nhắn thử tới kênh Discord"
+          >
+            Gửi thử
+          </button>
+          <div
             id="connection-status"
             class="conn-badge"
             role="status"
@@ -163,6 +188,7 @@
               <thead>
                 <tr>
                   <th scope="col">Cổng</th>
+                  <th scope="col">Vị trí</th>
                   <th scope="col">Trạng thái</th>
                   <th scope="col">Tín hiệu</th>
                   <th scope="col">Nhà mạng</th>
@@ -172,7 +198,7 @@
               </thead>
               <tbody id="modem-table-body">
                 <tr class="skeleton-row">
-                  <td colspan="6"><div class="skeleton"></div></td>
+                  <td colspan="7"><div class="skeleton"></div></td>
                 </tr>
               </tbody>
             </table>
@@ -396,6 +422,49 @@
               >
             </label>
           </header>
+          <div class="drawer-panel-footer">
+            <button
+              id="drawer-reconnect-btn"
+              class="btn drawer-reconnect-btn"
+              type="button"
+              title="Bỏ qua thời gian chờ, kết nối/kiểm tra SIM lại ngay"
+            >
+              Kiểm tra lại ngay
+            </button>
+          </div>
+        </section>
+
+        <section class="drawer-panel" id="drawer-label-block">
+          <header class="drawer-panel-head drawer-panel-head-compact">
+            <div class="drawer-panel-copy">
+              <h3 class="drawer-panel-title">Nhãn vị trí</h3>
+              <p class="drawer-panel-desc">
+                Windows gán số COM theo lịch sử USB, không theo khe vật lý.
+                Gán nhãn 1 lần để bảng luôn hiển thị đúng thứ tự thật.
+              </p>
+            </div>
+            <span class="drawer-panel-tag mono" id="drawer-label-tag"
+              >Chưa gán</span
+            >
+          </header>
+          <div class="drawer-panel-body">
+            <label class="label" for="drawer-label-input">Nhãn (VD: Khe 01)</label>
+            <input
+              type="text"
+              id="drawer-label-input"
+              class="input"
+              placeholder="Khe 01"
+              maxlength="40"
+              autocomplete="off"
+            />
+            <button
+              type="button"
+              class="btn btn-accent btn-full"
+              id="drawer-label-save"
+            >
+              Lưu nhãn
+            </button>
+          </div>
         </section>
 
         <section class="drawer-panel" id="drawer-phone-block">

@@ -7,6 +7,9 @@ const otpFeed = document.getElementById('otp-feed');
 const smsEmpty = document.getElementById('sms-empty');
 const otpEmpty = document.getElementById('otp-empty');
 const connectionStatus = document.getElementById('connection-status');
+const discordStatus = document.getElementById('discord-status');
+const discordStatusLabel = document.getElementById('discord-status-label');
+const discordTestBtn = document.getElementById('discord-test-btn');
 
 const statOnline = document.getElementById('stat-online');
 const statConnecting = document.getElementById('stat-connecting');
@@ -38,6 +41,7 @@ const drawerStatusBadge = document.getElementById('drawer-status-badge');
 const drawerMetrics = document.getElementById('drawer-metrics');
 const drawerPhoneBlock = document.getElementById('drawer-phone-block');
 const drawerPhoneTag = document.getElementById('drawer-phone-tag');
+const drawerLabelTag = document.getElementById('drawer-label-tag');
 const sendStatusTag = document.getElementById('send-status-tag');
 const sendSmsSection = document.getElementById('send-sms-section');
 const sendForm = document.getElementById('send-sms-form');
@@ -52,8 +56,11 @@ const phoneSetupCount = document.getElementById('phone-setup-count');
 const PHONE_SETUP_COLLAPSED_KEY = 'gsm-phone-setup-collapsed';
 const drawerPhoneInput = document.getElementById('drawer-phone-input');
 const drawerPhoneSave = document.getElementById('drawer-phone-save');
+const drawerLabelInput = document.getElementById('drawer-label-input');
+const drawerLabelSave = document.getElementById('drawer-label-save');
 const drawerEnabledToggle = document.getElementById('drawer-enabled-toggle');
 const drawerEnabledLabel = document.getElementById('drawer-enabled-label');
+const drawerReconnectBtn = document.getElementById('drawer-reconnect-btn');
 const enabledConfirmOverlay = document.getElementById('enabled-confirm-overlay');
 const enabledConfirmPort = document.getElementById('enabled-confirm-port');
 const enabledConfirmDesc = document.getElementById('enabled-confirm-desc');
@@ -119,6 +126,10 @@ const isDisplayableSender =
 const SMS_GROUP_WINDOW_MS = 20_000;
 
 const modems = new Map();
+// Distinguishes "still loading" from "genuinely zero modems" so the
+// alarming empty-state message doesn't flash during the initial fetch
+// (auto-discovery brings ports online gradually, taking several seconds).
+let initialModemsLoaded = false;
 const phoneDraftByPort = new Map();
 let pendingPhoneSave = null;
 let pendingEnabledSave = null;
@@ -617,7 +628,7 @@ function renderSimPill(modem) {
   }
 
   if (modem.status === 'no_sim') {
-    return '<span class="sim-pill empty">Empty</span>';
+    return '<span class="sim-pill no-sim">Empty</span>';
   }
 
   return `<span class="sim-pill ${modem.simReady ? 'ready' : 'not-ready'}">${modem.simReady ? 'Ready' : 'Waiting'}</span>`;
@@ -656,13 +667,30 @@ function updateStats() {
 }
 
 function renderModems() {
-  const rows = [...modems.values()].sort((a, b) =>
-    a.port.localeCompare(b.port, undefined, { numeric: true }),
-  );
+  // Labeled ports (assigned via drawer) sort by that physical-slot label so
+  // the table order matches the real hardware layout — Windows assigns COM
+  // numbers by USB enumeration history, not physical position, so raw COM
+  // order rarely matches the hub's silkscreen numbering. Unlabeled ports
+  // fall back to COM order and sort after any labeled ones.
+  const rows = [...modems.values()].sort((a, b) => {
+    const aHasLabel = Boolean(a.label);
+    const bHasLabel = Boolean(b.label);
+    if (aHasLabel !== bHasLabel) {
+      return aHasLabel ? -1 : 1;
+    }
+    const aKey = a.label || a.port;
+    const bKey = b.label || b.port;
+    return aKey.localeCompare(bKey, undefined, { numeric: true });
+  });
 
   updateStats();
 
   if (!rows.length) {
+    if (!initialModemsLoaded) {
+      // Still waiting on the first load — keep the skeleton row showing
+      // instead of claiming no modems were found.
+      return;
+    }
     modemTableWrap.classList.add('hidden');
     modemEmpty.classList.remove('hidden');
     modemTableBody.innerHTML = '';
@@ -685,6 +713,7 @@ function renderModems() {
         return `
       <tr class="clickable" data-port="${escapeHtml(modem.port)}" tabindex="0" role="button" aria-label="Chi tiết ${escapeHtml(modem.port)}">
         <td class="mono">${escapeHtml(modem.port)}</td>
+        <td class="${modem.label ? '' : 'label-missing'}">${escapeHtml(modem.label ?? '-')}</td>
         <td><span class="status-badge status-${escapeHtml(modem.status)}">${escapeHtml(STATUS_LABEL[modem.status] ?? modem.status)}</span>${errorBadge}</td>
         <td>${renderSignalBars(modem.signal)}</td>
         <td>${escapeHtml(modem.operator ?? '-')}</td>
@@ -817,6 +846,7 @@ async function loadModems() {
   const modemList = await res.json();
   modems.clear();
   modemList.forEach((modem) => modems.set(modem.port, modem));
+  initialModemsLoaded = true;
   renderModems();
 }
 
@@ -863,6 +893,64 @@ async function loadInitialData() {
   setConnectionState('', 'Đang tải dữ liệu...');
   await Promise.all([loadModems(), loadLiveMessages()]);
 }
+
+/* ── Discord webhook status ─────────────────────────────────────────── */
+function setDiscordState(state, label, title) {
+  discordStatus.classList.remove('is-live', 'is-fallback', 'is-error');
+  if (state) {
+    discordStatus.classList.add(state);
+  }
+  discordStatusLabel.textContent = label;
+  discordStatus.title = title ?? 'Trạng thái webhook Discord';
+}
+
+async function loadDiscordStatus() {
+  try {
+    const res = await fetch('/api/otp/discord-status');
+    if (!res.ok) throw new Error('discord-status request failed');
+    const status = await res.json();
+
+    if (!status.configured) {
+      setDiscordState('is-error', 'Discord: chưa cấu hình', 'DISCORD_WEBHOOK_URL chưa được đặt trong .env');
+      return;
+    }
+
+    if (!status.lastResult) {
+      setDiscordState('', 'Discord: đã cấu hình', 'Chưa có OTP nào được gửi thử hoặc gửi thật');
+      return;
+    }
+
+    const when =
+      formatRelativeTime(status.lastAttemptAt) ??
+      new Date(status.lastAttemptAt).toLocaleString('vi-VN');
+    if (status.lastResult === 'ok') {
+      setDiscordState('is-live', `Discord: OK · ${when}`, `Gửi thành công lúc ${new Date(status.lastAttemptAt).toLocaleString('vi-VN')}`);
+    } else {
+      setDiscordState('is-error', `Discord: lỗi · ${when}`, status.lastError ?? 'Gửi thất bại');
+    }
+  } catch {
+    setDiscordState('is-error', 'Discord: không rõ trạng thái', 'Không tải được trạng thái webhook');
+  }
+}
+
+on(discordTestBtn, 'click', async () => {
+  discordTestBtn.disabled = true;
+  discordTestBtn.textContent = 'Đang gửi...';
+  try {
+    const res = await fetch('/api/otp/discord-test', { method: 'POST' });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(body.message ?? 'Gửi thử thất bại');
+    }
+    showToast('Đã gửi tin nhắn thử tới Discord', 'success');
+  } catch (error) {
+    showToast(error.message ?? 'Gửi thử thất bại', 'error', 6000);
+  } finally {
+    discordTestBtn.disabled = false;
+    discordTestBtn.textContent = 'Gửi thử';
+    loadDiscordStatus();
+  }
+});
 
 /* ── Search mode ────────────────────────────────────────────────────── */
 function syncOnlyOtpChip() {
@@ -1085,6 +1173,11 @@ function renderDrawerDetail(modem) {
     drawerPhoneSave.disabled = portDisabled;
   }
 
+  if (drawerLabelTag) {
+    drawerLabelTag.textContent = modem.label ?? 'Chưa gán';
+    drawerLabelTag.className = `drawer-panel-tag mono${modem.label ? ' is-ok' : ' is-warn'}`;
+  }
+
   if (sendSmsSection) {
     sendSmsSection.classList.toggle('drawer-panel-muted', !canSend);
   }
@@ -1123,6 +1216,9 @@ function openDrawer(port) {
     if (drawerPhoneInput) {
       drawerPhoneInput.value =
         modem.phone ?? phoneDraftByPort.get(port) ?? '';
+    }
+    if (drawerLabelInput) {
+      drawerLabelInput.value = modem.label ?? '';
     }
     if (sendPhone) {
       sendPhone.value = '';
@@ -1203,6 +1299,39 @@ on(drawerPhoneSave, 'click', () => {
   requestPhoneSave(activeDrawerPort, drawerPhoneInput.value);
 });
 
+on(drawerLabelSave, 'click', async () => {
+  if (!activeDrawerPort || !drawerLabelInput) return;
+  const port = activeDrawerPort;
+  const label = drawerLabelInput.value.trim();
+  if (!label) {
+    showToast('Nhãn không được để trống', 'error');
+    return;
+  }
+
+  drawerLabelSave.disabled = true;
+  try {
+    const res = await fetch(`/api/modems/${encodeURIComponent(port)}/label`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ label }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(body.message ?? 'Lưu nhãn thất bại');
+    }
+    modems.set(port, body);
+    renderModems();
+    if (activeDrawerPort === port) {
+      renderDrawerDetail(body);
+    }
+    showToast(`Đã gán nhãn "${label}" cho ${port}`, 'success');
+  } catch (error) {
+    showToast(error.message ?? 'Lưu nhãn thất bại', 'error', 6000);
+  } finally {
+    drawerLabelSave.disabled = false;
+  }
+});
+
 function openEnabledConfirm(port, enabled) {
   pendingEnabledSave = { port, enabled };
   enabledConfirmPort.textContent = port;
@@ -1266,6 +1395,32 @@ if (drawerEnabledToggle) {
     openEnabledConfirm(activeDrawerPort, nextEnabled);
   });
 }
+
+on(drawerReconnectBtn, 'click', async () => {
+  if (!activeDrawerPort) return;
+  const port = activeDrawerPort;
+  const originalLabel = drawerReconnectBtn.textContent;
+  drawerReconnectBtn.disabled = true;
+  drawerReconnectBtn.textContent = 'Đang kiểm tra...';
+  try {
+    const res = await fetch(
+      `/api/modems/${encodeURIComponent(port)}/reconnect`,
+      { method: 'POST' },
+    );
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(body.message ?? 'Kiểm tra lại thất bại');
+    }
+    modems.set(port, body);
+    renderModems();
+    showToast(`Đã kiểm tra lại ${port}: ${STATUS_LABEL[body.status] ?? body.status}`, 'success');
+  } catch (error) {
+    showToast(error.message ?? 'Kiểm tra lại thất bại', 'error', 6000);
+  } finally {
+    drawerReconnectBtn.disabled = false;
+    drawerReconnectBtn.textContent = originalLabel;
+  }
+});
 
 on(enabledConfirmCancel, 'click', closeEnabledConfirm);
 
@@ -1464,6 +1619,9 @@ function connectSocket() {
     );
     showToast(`OTP ${otp.otp} · ${otp.port}`, 'success', 5000);
     attachOtpToPortChangeAlerts(otp.port, otp.otp);
+    // Discord delivery (with retries) happens async in the background —
+    // give it a moment before refreshing the status badge.
+    setTimeout(loadDiscordStatus, 2500);
   });
 
   socket.on('sim.port_changed', (data) => {
@@ -1504,5 +1662,7 @@ loadInitialData().catch(() => {
   modemTableWrap.classList.add('hidden');
   modemEmpty.classList.remove('hidden');
 });
+
+loadDiscordStatus();
 
 connectSocket();

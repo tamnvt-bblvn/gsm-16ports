@@ -485,7 +485,7 @@ body {
   background: var(--bg-hover);
 }
 
-.sim-pill.empty {
+.sim-pill.no-sim {
   color: var(--text-tertiary);
   background: var(--bg-hover);
 }
@@ -1155,8 +1155,13 @@ textarea.input {
   background: var(--warn-dim);
 }
 
+.drawer-status-badge.status-offline {
+  color: var(--danger);
+  border-color: rgba(251, 113, 133, 0.25);
+  background: var(--danger-dim);
+}
+
 .drawer-status-badge.status-no_sim,
-.drawer-status-badge.status-offline,
 .drawer-status-badge.status-disabled {
   color: var(--text-secondary);
   border-color: var(--line);
@@ -1304,6 +1309,14 @@ textarea.input {
 
 .drawer-panel-head-control {
   align-items: center;
+}
+
+.drawer-panel-footer {
+  padding: 10px 14px;
+}
+
+.drawer-reconnect-btn {
+  width: 100%;
 }
 
 .drawer-panel-copy {
@@ -1796,6 +1809,10 @@ textarea.input {
 
 .phone-known {
   color: var(--text);
+}
+
+.label-missing {
+  color: var(--text-tertiary);
 }
 
 /* ── Drawer switch ───────────────────────────────────────────────────── */
