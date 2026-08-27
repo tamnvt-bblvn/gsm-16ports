@@ -61,6 +61,7 @@ export class ModemInstance {
       iccid: null,
       lastError: null,
       enabled: true,
+      label: modemConfigService.getLabel(portName) ?? null,
     };
   }
 
@@ -73,10 +74,28 @@ export class ModemInstance {
     this.emitStatus();
   }
 
+  applyLabelOverride(label: string | null): void {
+    this.state.label = label;
+    this.emitStatus();
+  }
+
   async start(): Promise<void> {
     if (this.destroyed) {
       return;
     }
+    await this.connect();
+  }
+
+  /**
+   * Skips whatever backoff/no-SIM wait is pending and reconnects right now —
+   * lets an operator confirm a physical fix (SIM reseated, cable reattached)
+   * without waiting out reconnectIntervalMs/noSimReconnectIntervalMs.
+   */
+  async forceReconnect(): Promise<void> {
+    if (this.destroyed) {
+      return;
+    }
+    this.clearTimers();
     await this.connect();
   }
 
@@ -893,6 +912,7 @@ export class ModemInstance {
       iccid: this.state.iccid,
       lastError: this.state.lastError,
       enabled: this.modemConfigService.isPortEnabled(this.portName),
+      label: this.state.label,
     });
   }
 

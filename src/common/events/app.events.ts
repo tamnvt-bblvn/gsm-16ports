@@ -56,6 +56,7 @@ export interface ModemStatusPayload {
   iccid: string | null;
   lastError: string | null;
   enabled: boolean;
+  label: string | null;
 }
 
 export interface ModemRemovedPayload {

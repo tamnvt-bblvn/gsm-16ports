@@ -56,11 +56,12 @@ describe('ModemManager.sendSms', () => {
         }),
       },
     );
-    (manager as unknown as { modemConfigService: { getEntry: () => undefined; isPortEnabled: () => true; getPhoneOverride: () => undefined } }).modemConfigService =
+    (manager as unknown as { modemConfigService: { getEntry: () => undefined; isPortEnabled: () => true; getPhoneOverride: () => undefined; getLabel: () => undefined } }).modemConfigService =
       {
         getEntry: () => undefined,
         isPortEnabled: () => true,
         getPhoneOverride: () => undefined,
+        getLabel: () => undefined,
       };
 
     expect(manager.getState(' com3 ')?.port).toBe('COM3');

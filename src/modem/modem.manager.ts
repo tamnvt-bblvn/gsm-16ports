@@ -177,6 +177,32 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
     return this.buildStateForPort(normalizedPort);
   }
 
+  updatePortLabel(port: string, label: string): ModemRuntimeState {
+    const normalizedPort = normalizeComPort(port);
+
+    this.modemConfigService.ensureEntry(normalizedPort);
+
+    const trimmedLabel = label.trim();
+    if (!trimmedLabel) {
+      throw new Error('Nhãn không được để trống');
+    }
+    if (trimmedLabel.length > 40) {
+      throw new Error('Nhãn tối đa 40 ký tự');
+    }
+
+    this.modemConfigService.updateEntryLabel(normalizedPort, trimmedLabel);
+
+    const instance = this.instances.get(normalizedPort);
+    if (instance) {
+      instance.applyLabelOverride(trimmedLabel);
+    } else {
+      const state = this.buildStateForPort(normalizedPort);
+      this.eventEmitter.emit(MODEM_STATUS_EVENT, state);
+    }
+
+    return this.buildStateForPort(normalizedPort);
+  }
+
   async sendSms(
     port: string,
     phone: string,
@@ -190,6 +216,17 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
 
     const reference = await instance.sendSms(phone, message);
     return { port: normalizedPort, phone, reference };
+  }
+
+  async forceReconnect(port: string): Promise<ModemRuntimeState> {
+    const normalizedPort = normalizeComPort(port);
+    const instance = this.instances.get(normalizedPort);
+    if (!instance) {
+      throw new Error(`Unknown COM port: ${normalizedPort}`);
+    }
+
+    await instance.forceReconnect();
+    return this.buildStateForPort(normalizedPort);
   }
 
   @OnEvent(MODEM_STATUS_EVENT)
@@ -225,6 +262,7 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
     const phoneOverride = normalizePhone(
       this.modemConfigService.getPhoneOverride(port),
     );
+    const label = this.modemConfigService.getLabel(port) ?? null;
 
     if (!enabled) {
       return {
@@ -237,6 +275,7 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
         iccid: null,
         lastError: null,
         enabled: false,
+        label,
       };
     }
 
@@ -255,6 +294,7 @@ export class ModemManager implements OnModuleInit, OnModuleDestroy {
       iccid: null,
       lastError: null,
       enabled: true,
+      label,
     };
   }
 

@@ -15,4 +15,6 @@ export interface ModemRuntimeState {
   iccid: string | null;
   lastError: string | null;
   enabled: boolean;
+  /** Operator-assigned physical slot label; null when never set. */
+  label: string | null;
 }

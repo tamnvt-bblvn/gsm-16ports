@@ -10,6 +10,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ApiOkResponse, ApiParam, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Public } from '../common/decorators/public.decorator';
 import { ModemManager } from '../modem/modem.manager';
 import { AtCommandService } from '../modem/at-command.service';
@@ -17,6 +18,7 @@ import type { ModemRuntimeState } from '../modem/modem.types';
 import { SendSmsDto } from './dto/send-sms.dto';
 import { UpdateModemEnabledDto } from './dto/update-modem-enabled.dto';
 import { UpdateModemPhoneDto } from './dto/update-modem-phone.dto';
+import { UpdateModemLabelDto } from './dto/update-modem-label.dto';
 
 /** Dashboard ops surface — reachable without API key when auth is enabled. */
 @Public()
@@ -74,6 +76,28 @@ export class ModemStatusController {
     }
   }
 
+  @Post(':port/reconnect')
+  // Cheap to spam-click by accident; cap it well below the AT command
+  // timeout budget so a couple of clicks in a row don't queue up reconnects.
+  @Throttle({ default: { limit: 6, ttl: 60_000 } })
+  @ApiParam({ name: 'port', example: 'COM3' })
+  @ApiOkResponse({
+    description:
+      'Forces an immediate reconnect/SIM re-probe, skipping any pending backoff wait',
+  })
+  async reconnect(@Param('port') port: string): Promise<ModemRuntimeState> {
+    try {
+      return await this.modemManager.forceReconnect(port);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Reconnect failed';
+      if (message.includes('Unknown COM port')) {
+        throw new NotFoundException(message);
+      }
+      throw new BadRequestException(message);
+    }
+  }
+
   @Patch(':port/phone')
   @ApiParam({ name: 'port', example: 'COM3' })
   @ApiOkResponse({ description: 'Assign SIM phone override and persist to modems.yaml' })
@@ -93,7 +117,32 @@ export class ModemStatusController {
     }
   }
 
+  @Patch(':port/label')
+  @ApiParam({ name: 'port', example: 'COM3' })
+  @ApiOkResponse({
+    description: 'Assign a physical-slot label and persist to modems.yaml',
+  })
+  updateLabel(
+    @Param('port') port: string,
+    @Body() body: UpdateModemLabelDto,
+  ): ModemRuntimeState {
+    try {
+      return this.modemManager.updatePortLabel(port, body.label);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Label update failed';
+      if (message.includes('Unknown COM port')) {
+        throw new NotFoundException(message);
+      }
+      throw new BadRequestException(message);
+    }
+  }
+
   @Post(':port/send-sms')
+  // Sending SMS costs real modem/carrier resources, so it gets a tighter
+  // cap than the general API traffic limit — protects against a runaway
+  // script accidentally blasting one port.
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @ApiParam({ name: 'port', example: 'COM3' })
   @ApiOkResponse({ description: 'Send an SMS through the given modem' })
   async sendSms(@Param('port') port: string, @Body() body: SendSmsDto) {

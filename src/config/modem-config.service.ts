@@ -105,6 +105,11 @@ export class ModemConfigService implements OnModuleInit {
     return phone || undefined;
   }
 
+  getLabel(port: string): string | undefined {
+    const label = this.getEntry(port)?.label?.trim();
+    return label || undefined;
+  }
+
   /**
    * Ensure an entry exists for the given port. Creates one if missing.
    * Used by auto-discover to persist newly found ports.
@@ -159,6 +164,23 @@ export class ModemConfigService implements OnModuleInit {
 
     this.persistConfig();
     this.logger.log(`Updated phone override for ${normalizedPort}`);
+  }
+
+  updateEntryLabel(port: string, label: string): void {
+    const normalizedPort = port.trim().toUpperCase();
+    const entries = this.config.entries ?? [];
+    let entry = entries.find((item) => item.port === normalizedPort);
+
+    if (!entry) {
+      entry = { port: normalizedPort, enabled: true, phone: '', label };
+      entries.push(entry);
+      this.config.entries = entries;
+    } else {
+      entry.label = label;
+    }
+
+    this.persistConfig();
+    this.logger.log(`Updated slot label "${label}" for ${normalizedPort}`);
   }
 
   /**
