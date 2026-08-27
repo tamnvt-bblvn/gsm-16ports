@@ -3,6 +3,7 @@ module.exports = {
     {
       name: 'gsm-otp-service',
       script: 'dist/src/main.js',
+      cwd: __dirname,
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,

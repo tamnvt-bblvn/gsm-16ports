@@ -34,14 +34,17 @@ const streams: pino.StreamEntry[] = [
   },
 ];
 
-if (process.env.NODE_ENV !== 'production') {
-  streams.push({
-    stream: pino.transport({
-      target: 'pino-pretty',
-      options: { singleLine: true },
-    }),
-  });
-}
+// Always mirror to stdout (not just outside production) so `pm2 logs`
+// shows readable output directly — pm2 only captures what the process
+// writes to stdout/stderr, and previously that stream was skipped in
+// production, leaving `pm2 logs` empty and forcing a manual open of
+// logs/gsm-otp.log to see anything.
+streams.push({
+  stream: pino.transport({
+    target: 'pino-pretty',
+    options: { singleLine: true },
+  }),
+});
 
 @Module({
   imports: [
