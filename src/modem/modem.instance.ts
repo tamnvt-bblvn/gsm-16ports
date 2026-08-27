@@ -18,6 +18,10 @@ import { SmsParser } from './sms.parser';
 
 const QUIET_ERRORS = new Set(['Port closed', 'Port closed during reconnect']);
 
+interface AtCommandError extends Error {
+  atLines?: string[];
+}
+
 export class ModemInstance {
   private port: SerialPort | null = null;
   private parser: ReadlineParser | null = null;
@@ -126,6 +130,16 @@ export class ModemInstance {
       const timeout = config.atCommandTimeoutMs;
       await this.sendCommand('AT', timeout, true);
 
+      // Force automatic network scan (2G/3G/4G) instead of the module's
+      // factory-default GSM-only lock, which stops registering once a
+      // carrier switches off 2G in the area. Quectel-specific; harmless
+      // no-op (ERROR, swallowed) on modules that don't support it.
+      try {
+        await this.sendCommand('AT+QCFG="nwscanmode",0', timeout, true);
+      } catch {
+        // Ignore on non-Quectel modules
+      }
+
       const simState = await this.probeSimPresence();
       if (simState === 'absent') {
         await this.handleNoSim();
@@ -170,7 +184,14 @@ export class ModemInstance {
     try {
       const lines = await this.sendCommand('AT+CPIN?', timeout, true);
       return this.atCommandService.parseSimState(lines.join('\n'));
-    } catch {
+    } catch (error) {
+      // AT+CPIN? replies with +CME ERROR (not OK) when there's no SIM;
+      // sendCommand rejects on that, so recover the raw lines from the
+      // error instead of losing the "absent" signal to a generic retry.
+      const atLines = (error as AtCommandError).atLines;
+      if (atLines) {
+        return this.atCommandService.parseSimState(atLines.join('\n'));
+      }
       return 'other';
     }
   }
@@ -210,11 +231,17 @@ export class ModemInstance {
 
   private async readAndTrackIccid(): Promise<void> {
     const iccid = await this.readIccid();
-    this.currentIccid = iccid;
-    this.state.iccid = iccid;
-
     if (iccid) {
+      this.currentIccid = iccid;
+      this.state.iccid = iccid;
       this.logger.debug(`modem.iccid port=${this.portName} iccid=${iccid}`);
+    } else if (!this.currentIccid) {
+      // Only clear when we never had an ICCID for this instance. A null
+      // result here is more often a transient AT hiccup (flaky serial
+      // link) than the SIM actually leaving — overwriting a known-good
+      // ICCID with null made checkSimChange() see a false null→real
+      // transition moments later and fire a bogus "SIM changed" event.
+      this.state.iccid = null;
     }
   }
 
@@ -447,11 +474,11 @@ export class ModemInstance {
         if (trimmed === 'OK') {
           current.resolve(current.lines);
         } else {
-          current.reject(
-            new Error(
-              `${this.portName}: ${this.atCommandService.formatFailureMessage(current.lines)}`,
-            ),
-          );
+          const error = new Error(
+            `${this.portName}: ${this.atCommandService.formatFailureMessage(current.lines)}`,
+          ) as AtCommandError;
+          error.atLines = current.lines;
+          current.reject(error);
         }
       }
       return;
