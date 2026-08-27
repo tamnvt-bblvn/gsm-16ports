@@ -4,15 +4,44 @@ import {
   Get,
   HttpException,
   HttpStatus,
+  Post,
   Query,
 } from '@nestjs/common';
 import { ApiOkResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { Public } from '../common/decorators/public.decorator';
 import { OtpService } from './otp.service';
+import { DiscordWebhookService } from './discord-webhook.service';
 
 @ApiTags('otp')
 @Controller('api/otp')
 export class OtpController {
-  constructor(private readonly otpService: OtpService) {}
+  constructor(
+    private readonly otpService: OtpService,
+    private readonly discordWebhookService: DiscordWebhookService,
+  ) {}
+
+  @Public()
+  @Get('discord-status')
+  @ApiOkResponse({
+    description: 'Whether the Discord webhook is configured and its last delivery result',
+  })
+  getDiscordStatus() {
+    return this.discordWebhookService.getStatus();
+  }
+
+  @Public()
+  @Post('discord-test')
+  @ApiOkResponse({ description: 'Sends a sample embed to verify the Discord webhook' })
+  async testDiscord() {
+    const result = await this.discordWebhookService.sendTest();
+    if (!result.ok) {
+      throw new HttpException(
+        result.reason ?? 'Gửi thử thất bại',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    return { ok: true };
+  }
 
   @Get('latest')
   @ApiQuery({ name: 'phone', required: false, type: String })

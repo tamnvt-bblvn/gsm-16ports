@@ -4,12 +4,24 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { AppConfigService } from '../config/app-config.service';
 import { OTP_RECEIVED_EVENT } from '../common/events/app.events';
 import type { OtpReceivedPayload } from '../common/events/app.events';
+import { postWebhookWithRetry } from '../common/utils/webhook-post.util';
 
 const DISCORD_FIELD_VALUE_MAX = 1024;
 const EMBED_COLOR = 0x22d3ee;
 
+export interface DiscordWebhookStatus {
+  configured: boolean;
+  lastResult: 'ok' | 'error' | null;
+  lastAttemptAt: string | null;
+  lastError: string | null;
+}
+
 @Injectable()
 export class DiscordWebhookService {
+  private lastResult: 'ok' | 'error' | null = null;
+  private lastAttemptAt: Date | null = null;
+  private lastError: string | null = null;
+
   constructor(
     private readonly appConfig: AppConfigService,
     @InjectPinoLogger(DiscordWebhookService.name)
@@ -23,34 +35,73 @@ export class DiscordWebhookService {
       return;
     }
 
-    const controller = new AbortController();
-    const timer = setTimeout(
-      () => controller.abort(),
-      this.appConfig.discordWebhookTimeoutMs,
-    );
-
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(this.buildPayload(payload)),
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
+    // Retries so a Discord rate-limit (5 req/2s per webhook) or a transient
+    // network blip doesn't silently drop a time-sensitive OTP — this is the
+    // channel operators actually watch, so best-effort single-shot isn't
+    // good enough here.
+    const result = await postWebhookWithRetry({
+      url,
+      body: this.buildPayload(payload),
+      timeoutMs: this.appConfig.discordWebhookTimeoutMs,
+      onAttemptFailed: (reason, attempt, maxAttempts) => {
         this.logger.warn(
-          `discord.webhook_failed status=${response.status} port=${payload.port}`,
+          `discord.webhook_attempt_failed reason=${reason} port=${payload.port} attempt=${attempt}/${maxAttempts}`,
         );
-      }
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'webhook request failed';
-      this.logger.warn(
-        `discord.webhook_error reason=${message} port=${payload.port}`,
-      );
-    } finally {
-      clearTimeout(timer);
+      },
+    });
+
+    this.recordResult(result);
+  }
+
+  /** Sends a sample embed so an admin can verify the webhook from the dashboard. */
+  async sendTest(): Promise<{ ok: boolean; reason?: string }> {
+    const url = this.appConfig.discordWebhookUrl;
+    if (!url) {
+      return { ok: false, reason: 'DISCORD_WEBHOOK_URL chưa được cấu hình' };
     }
+
+    const result = await postWebhookWithRetry({
+      url,
+      body: this.buildTestPayload(),
+      timeoutMs: this.appConfig.discordWebhookTimeoutMs,
+      onAttemptFailed: (reason, attempt, maxAttempts) => {
+        this.logger.warn(
+          `discord.webhook_test_attempt_failed reason=${reason} attempt=${attempt}/${maxAttempts}`,
+        );
+      },
+    });
+
+    this.recordResult(result);
+    return result;
+  }
+
+  getStatus(): DiscordWebhookStatus {
+    return {
+      configured: Boolean(this.appConfig.discordWebhookUrl),
+      lastResult: this.lastResult,
+      lastAttemptAt: this.lastAttemptAt?.toISOString() ?? null,
+      lastError: this.lastError,
+    };
+  }
+
+  private recordResult(result: { ok: boolean; reason?: string }): void {
+    this.lastAttemptAt = new Date();
+    this.lastResult = result.ok ? 'ok' : 'error';
+    this.lastError = result.ok ? null : (result.reason ?? 'unknown error');
+  }
+
+  private buildTestPayload() {
+    return {
+      embeds: [
+        {
+          title: '✅ Kiểm tra kết nối Discord webhook',
+          description:
+            'Nếu bạn thấy tin nhắn này, webhook đã được cấu hình đúng và sẵn sàng nhận OTP.',
+          color: EMBED_COLOR,
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    };
   }
 
   private buildPayload(payload: OtpReceivedPayload) {
